@@ -1,21 +1,17 @@
 <?php
 header("Content-Type: application/json; charset=UTF-8");
 
-// بيانات الاتصال
-$host = 'ep-weathered-sea-ahagsdqv-pooler.c-3.us-east-1.aws.neon.tech';
-$port = '5432';
-$dbname = 'neondb';
-$user = 'neondb_owner';
-$password = 'npg_6Lh8BTSKHfxg';
-$sslmode = 'require';
-$endpoint = 'ep-weathered-sea-ahagsdqv';
+$host = getenv('DB_HOST');
+$port = getenv('DB_PORT');
+$dbname = getenv('DB_NAME');
+$user = getenv('DB_USER');
+$password = getenv('DB_PASSWORD');
+$sslmode = getenv('DB_SSLMODE');
 
-$conn_string = "host=$host port=$port dbname=$dbname user=$user password=$password sslmode=$sslmode options='endpoint=$endpoint'";
-$conn = pg_connect($conn_string);
+$conn = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password sslmode=$sslmode");
 
-if (!$conn) {
-    http_response_code(500);
-    echo json_encode(['error' => 'فشل الاتصال بقاعدة البيانات!']);
+if(!$conn){
+    echo json_encode(["error" => "فشل الاتصال بقاعدة البيانات!"]);
     exit;
 }
 
