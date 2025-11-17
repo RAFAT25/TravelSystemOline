@@ -4,10 +4,9 @@ $port = getenv('DB_PORT');
 $dbname = getenv('DB_NAME');
 $user = getenv('DB_USER');
 $password = getenv('DB_PASSWORD');
-$sslmode = getenv('DB_SSLMODE');
-$endpoint = getenv('DB_ENDPOINT');
+$sslmode = getenv('DB_SSLMODE'); // يمكن وضعها مباشرة "require"
 
-$dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=$sslmode;options='endpoint=$endpoint'";
+$dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=$sslmode";
 
 try {
     $con = new PDO($dsn, $user, $password, [
