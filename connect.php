@@ -1,11 +1,11 @@
 <?php
-$host = 'ep-weathered-sea-ahagsdqv-pooler.c-3.us-east-1.aws.neon.tech';
-$port = '5432';
-$dbname = 'neondb';
-$user = 'neondb_owner';
-$password = 'npg_6Lh8BTSKHfxg';
-$sslmode = 'require';
-$endpoint = 'ep-weathered-sea-ahagsdqv';
+$host = getenv('DB_HOST');
+$port = getenv('DB_PORT');
+$dbname = getenv('DB_NAME');
+$user = getenv('DB_USER');
+$password = getenv('DB_PASSWORD');
+$sslmode = getenv('DB_SSLMODE');
+$endpoint = getenv('DB_ENDPOINT');
 
 $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=$sslmode;options='endpoint=$endpoint'";
 
