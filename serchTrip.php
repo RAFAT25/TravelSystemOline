@@ -17,19 +17,25 @@ if (empty($from_stop) || empty($to_city) || empty($date) || empty($bus_class)) {
     exit();
 }
 
+// الاستعلام المعدل (إخراج جميع الحقول اللازمة)
 $sql = "
 SELECT
     t.trip_id,
     t.departure_time,
     t.arrival_time,
-    t.base_price,
+    t.base_price AS price_adult,
+    (t.base_price - 50) AS price_child,
     r.origin_city,
     r.destination_city,
     rs_from.stop_name AS from_stop,
     rs_to.stop_name   AS to_stop,
     bu.model,
     bc.class_name     AS bus_class,
-    p.company_name
+    p.company_name,
+    (
+        SELECT COUNT(*) FROM seats s
+        WHERE s.bus_id = t.bus_id AND s.is_available IS TRUE
+    ) AS availableSeats
 FROM trips t
 JOIN routes r            ON t.route_id = r.route_id
 JOIN route_stops rs_from ON rs_from.route_id = r.route_id AND rs_from.stop_name = :from_stop
@@ -50,9 +56,32 @@ $stmt->execute([
     ':bus_class' => $bus_class
 ]);
 
-$trips = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$trips = [];
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    // حساب مدة الرحلة (duration)
+    $dep = new DateTime($row['departure_time']);
+    $arr = new DateTime($row['arrival_time']);
+    $interval = $dep->diff($arr);
+    $duration = $interval->h . " ساعات, " . $interval->i . " دقائق";
 
-if ($trips) {
+    // تجهيز الخريطة النهائية (متوافقة مع BusTrip بالكامل)
+    $trips[] = [
+        "trip_id"         => $row['trip_id'],
+        "departure_time"  => $row['departure_time'],
+        "arrival_time"    => $row['arrival_time'],
+        "origin_city"     => $row['origin_city'],
+        "destination_city"=> $row['destination_city'],
+        "bus_class"       => $row['bus_class'],
+        "price_adult"     => $row['price_adult'],
+        "price_child"     => $row['price_child'],
+        "availableSeats"  => $row['availableSeats'],
+        "company_name"    => $row['company_name'],
+        "duration"        => $duration,
+        // باقي الحقول إذا احتجتها (from_stop, to_stop, model...)
+    ];
+}
+
+if (!empty($trips)) {
     echo json_encode([
         "success" => true,
         "trips"   => $trips
