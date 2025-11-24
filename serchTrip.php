@@ -64,7 +64,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $interval = $dep->diff($arr);
     $duration = $interval->h . " ساعات, " . $interval->i . " دقائق";
 
-    // تجهيز الخريطة النهائية (متوافقة مع BusTrip بالكامل)
+    // تجهيز الخريطة النهائية (متوافقة مع BusTrip بالكامل) - مع حماية availableSeats
     $trips[] = [
         "trip_id"         => $row['trip_id'],
         "departure_time"  => $row['departure_time'],
@@ -74,7 +74,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         "bus_class"       => $row['bus_class'],
         "price_adult"     => $row['price_adult'],
         "price_child"     => $row['price_child'],
-        "availableSeats"  => $row['availableSeats'],
+        // السطر التالي يضمن أن availableSeats لا تظهر null أبدًا
+        "availableSeats"  => isset($row['availableSeats']) && $row['availableSeats'] !== null ? $row['availableSeats'] : 0,
         "company_name"    => $row['company_name'],
         "duration"        => $duration,
         // باقي الحقول إذا احتجتها (from_stop, to_stop, model...)
