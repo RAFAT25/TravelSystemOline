@@ -17,7 +17,7 @@ if (empty($email) || empty($password)) {
 }
 
 // استعلام المستخدم عبر البريد فقط
-$stmt = $con->prepare("SELECT user_id, full_name, password_hash FROM users WHERE email = :email");
+$stmt = $con->prepare("SELECT user_id, full_name,email, password_hash FROM users WHERE email = :email");
 $stmt->execute([':email' => $email]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
