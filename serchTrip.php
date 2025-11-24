@@ -17,7 +17,7 @@ if (empty($from_stop) || empty($to_city) || empty($date) || empty($bus_class)) {
     exit();
 }
 
-// الاستعلام المعدل (إخراج جميع الحقول اللازمة)
+// الاستعلام مع اسم الحقل count للمقاعد المتاحة
 $sql = "
 SELECT
     t.trip_id,
@@ -35,7 +35,7 @@ SELECT
     (
         SELECT COUNT(*) FROM seats s
         WHERE s.bus_id = t.bus_id AND s.is_available IS TRUE
-    ) AS availableSeats
+    ) AS count
 FROM trips t
 JOIN routes r            ON t.route_id = r.route_id
 JOIN route_stops rs_from ON rs_from.route_id = r.route_id AND rs_from.stop_name = :from_stop
@@ -58,26 +58,27 @@ $stmt->execute([
 
 $trips = [];
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    // حساب مدة الرحلة (duration)
+    // الحصول على عدد المقاعد المتاحة من حقل count
+    $availableSeats = isset($row['count']) && $row['count'] !== null ? intval($row['count']) : 0;
+
+    // حساب مدة الرحلة
     $dep = new DateTime($row['departure_time']);
     $arr = new DateTime($row['arrival_time']);
     $interval = $dep->diff($arr);
     $duration = $interval->h . " ساعات, " . $interval->i . " دقائق";
 
-    // تجهيز الخريطة النهائية (متوافقة مع BusTrip بالكامل) - مع حماية availableSeats
     $trips[] = [
-        "trip_id"         => $row['trip_id'],
-        "departure_time"  => $row['departure_time'],
-        "arrival_time"    => $row['arrival_time'],
-        "origin_city"     => $row['origin_city'],
-        "destination_city"=> $row['destination_city'],
-        "bus_class"       => $row['bus_class'],
-        "price_adult"     => $row['price_adult'],
-        "price_child"     => $row['price_child'],
-        // السطر التالي يضمن أن availableSeats لا تظهر null أبدًا
-        "availableSeats"  => isset($row['availableSeats']) && $row['availableSeats'] !== null ? $row['availableSeats'] : 0,
-        "company_name"    => $row['company_name'],
-        "duration"        => $duration,
+        "trip_id"          => $row['trip_id'],
+        "departure_time"   => $row['departure_time'],
+        "arrival_time"     => $row['arrival_time'],
+        "origin_city"      => $row['origin_city'],
+        "destination_city" => $row['destination_city'],
+        "bus_class"        => $row['bus_class'],
+        "price_adult"      => $row['price_adult'],
+        "price_child"      => $row['price_child'],
+        "availableSeats"   => $availableSeats,   // يعرض العدد المكتسب من الحقل count
+        "company_name"     => $row['company_name'],
+        "duration"         => $duration,
         // باقي الحقول إذا احتجتها (from_stop, to_stop, model...)
     ];
 }
