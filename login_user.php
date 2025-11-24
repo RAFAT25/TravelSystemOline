@@ -29,6 +29,7 @@ if ($user && password_verify($password, $user['password_hash'])) {
         "success"   => true,
         "user_id"   => $user['user_id'],
         "user_name" => $user['full_name'],
+        "userEmail" => $user['email'],
         "token"     => $token
     ], JSON_UNESCAPED_UNICODE);
 } else {
