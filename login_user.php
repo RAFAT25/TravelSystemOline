@@ -24,7 +24,6 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
 if ($user && password_verify($password, $user['password_hash'])) {
     // إنشاء توكن وهمي (للتجربة فقط)
     $token = md5($user['user_id'] . time());
-
     echo json_encode([
         "success"   => true,
         "user_id"   => $user['user_id'],
