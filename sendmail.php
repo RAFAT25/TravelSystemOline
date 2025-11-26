@@ -1,35 +1,34 @@
 <?php
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+require 'config.php'; // هذا الملف يحتوي على التعاريف
 
-require 'PHPMailer/src/Exception.php';
-require 'PHPMailer/src/PHPMailer.php';
-require 'PHPMailer/src/SMTP.php';
-require 'config.php';
+$emailData = [
+    'sender' => ['email' => BREVO_EMAIL, 'name' => 'منصه احجزلي'],
+    'to' => [['email' => 'rafatkang@gmail.com', 'name' => 'Rafat']],
+    'subject' => 'اختبار API Brevo',
+    'htmlContent' => '<b>نجح الإرسال عبر Brevo REST API! 🚀</b>'
+];
 
-$mail = new PHPMailer(true);
+$curl = curl_init();
 
-try {
-    $mail->isSMTP();
-    $mail->Host       = 'smtp-relay.brevo.com';
-    $mail->SMTPAuth   = true;
-    $mail->Username   = 'rafat.mohammed.dev@gmail.com';
-    $mail->Password   = 'xsmtpsib-4b1cc8d601da34680c8f25c1d89c1be3429b15961144c82306b7b583314a746c-D50RChIMCsDvvuUX';
-    $mail->SMTPSecure = false;
-    $mail->SMTPAutoTLS= false;
-    $mail->Port= 587;
+curl_setopt_array($curl, [
+    CURLOPT_URL => "https://api.brevo.com/v3/smtp/email",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode($emailData),
+    CURLOPT_HTTPHEADER => [
+        "accept: application/json",
+        "api-key: " . BREVO_API_KEY,
+        "content-type: application/json"
+    ]
+]);
 
-    $mail->setFrom(BREVO_EMAIL, 'منصه احجزلي');
-    $mail->addAddress('rafatkang@gmail.com', 'Rafat');
+$response = curl_exec($curl);
 
-    $mail->isHTML(true);
-    $mail->Subject = 'Brevo Local Test';
-    $mail->Body    = '<b>Test email sent via Brevo + PHPMailer</b>';
-    $mail->SMTPDebug=2;
-       
-    $mail->send();
-    echo 'Email sent successfully';
-} catch (Exception $e) {
-    echo "Error: {$mail->ErrorInfo}";
+if (curl_errno($curl)) {
+    echo 'Curl error: ' . curl_error($curl);
+} else {
+    echo 'API Response: ' . $response;
 }
+
+curl_close($curl);
 ?>
