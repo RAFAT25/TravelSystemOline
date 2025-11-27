@@ -19,7 +19,7 @@ try {
     $mail->Port       = 465;
 
     $mail->setFrom(ZOHO_EMAIL, 'منصه احجزلي');
-    $mail->addAddress('rafatkang@gmail.com', 'Rafat');
+    $mail->addAddress('rafat.mohammed.dev@gmail.com', 'Rafat');
 
     $mail->isHTML(true);
     $mail->Subject = 'اختبار Zoho SMTP';
