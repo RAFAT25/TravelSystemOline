@@ -1,34 +1,32 @@
 <?php
-require 'config.php'; // هذا الملف يحتوي على التعاريف
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-$emailData = [
-    'sender' => ['email' => BREVO_EMAIL, 'name' => 'منصه احجزلي'],
-    'to' => [['email' => 'rafatkang@gmail.com', 'name' => 'Rafat']],
-    'subject' => 'اختبار API Brevo',
-    'htmlContent' => '<b>نجح الإرسال عبر Brevo REST API! 🚀</b>'
-];
+require 'PHPMailer/src/Exception.php';
+require 'PHPMailer/src/PHPMailer.php';
+require 'PHPMailer/src/SMTP.php';
+require 'config.php';
 
-$curl = curl_init();
+$mail = new PHPMailer(true);
 
-curl_setopt_array($curl, [
-    CURLOPT_URL => "https://api.brevo.com/v3/smtp/email",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => json_encode($emailData),
-    CURLOPT_HTTPHEADER => [
-        "accept: application/json",
-        "api-key: " . BREVO_API_KEY,
-        "content-type: application/json"
-    ]
-]);
+try {
+    $mail->isSMTP();
+    $mail->Host       = 'smtp.zoho.com';
+    $mail->SMTPAuth   = true;
+    $mail->Username   = ZOHO_EMAIL;   // نفس الإيميل
+    $mail->Password   = ZOHO_PASS;   // كلمة المرور أو App Password
+    $mail->SMTPSecure = 'ssl';       // لــ 465 يجب SSL
+    $mail->Port       = 465;
 
-$response = curl_exec($curl);
+    $mail->setFrom(ZOHO_EMAIL, 'منصه احجزلي');
+    $mail->addAddress('rafatkang@gmail.com', 'Rafat');
 
-if (curl_errno($curl)) {
-    echo 'Curl error: ' . curl_error($curl);
-} else {
-    echo 'API Response: ' . $response;
+    $mail->isHTML(true);
+    $mail->Subject = 'اختبار Zoho SMTP';
+    $mail->Body    = '<b>رسالة تجريبية من Zoho SMTP</b>';
+
+    $mail->send();
+    echo 'تم إرسال الإيميل بنجاح';
+} catch (Exception $e) {
+    echo "خطأ: {$mail->ErrorInfo}";
 }
-
-curl_close($curl);
-?>
