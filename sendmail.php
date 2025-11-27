@@ -1,19 +1,20 @@
 <?php
-require 'config.php';
+$brevoEmail  = getenv('BREVO_EMAIL');
+$brevoApiKey = getenv('BREVO_API_KEY');
 
 $data = [
     'sender' => [
-        'email' => BREVO_EMAIL,
+        'email' => $brevoEmail,
         'name'  => 'منصه احجزلي'
     ],
     'to' => [
         [
-            'email' => 'rafat.mohammed.dev@gmail.com',
+            'email' => 'rafatkang@gmail.com',
             'name'  => 'Rafat'
         ]
     ],
     'subject' => 'اختبار Brevo API من Render',
-    'htmlContent' => '<b>تم الإرسال عبر Brevo REST API من Render بدون SMTP</b>'
+    'htmlContent' => '<b>تم الإرسال عبر Brevo REST API من Render مع Environment Variables</b>'
 ];
 
 $ch = curl_init();
@@ -24,7 +25,7 @@ curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => [
         'accept: application/json',
-        'api-key: ' . BREVO_API_KEY,
+        'api-key: ' . $brevoApiKey,
         'content-type: application/json'
     ],
     CURLOPT_POSTFIELDS => json_encode($data),
