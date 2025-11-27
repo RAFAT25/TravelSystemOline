@@ -51,7 +51,7 @@ $data = [
     ],
     'to' => [
         [
-            'email' => 'rafatkang@gmail.com',
+            'email' => 'rafat.mohammed.dev@gmail.com',
             'name'  => 'Rafat'
         ]
     ],
