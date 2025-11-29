@@ -89,19 +89,20 @@ try {
                 ':trip_id'    => $trip_id,
             ]);
         } catch (PDOException $e) {
-            // فشل بسبب تكرار (trip_id, seat_id) = مقعد محجوز مسبقاً
-            if ($e->errorInfo[1] == 1062) { // MySQL duplicate key
+            // PostgreSQL: كود الخطأ 23505 يعني unique_violation
+            if ($e->getCode() === '23505') {
+                // حجز مكرر لنفس المقعد (trip_id, seat_id) بسبب uq_trip_seat
                 $con->rollBack();
                 echo json_encode([
                     'success' => false,
-                    'error'   => 'أحد المقاعد تم حجزه بالفعل من قبل عميل آخر. الرجاء تحديث المقاعد واختيار مقعد آخر.'
+                    'error'   => 'هذا المقعد تم حجزه بالفعل من قبل عميل آخر. الرجاء تحديث المقاعد واختيار مقعد آخر.'
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
             } else {
                 $con->rollBack();
                 echo json_encode([
                     'success' => false,
-                    'error'   => 'خطأ أثناء حفظ بيانات الركاب: ' . $e->getMessage()
+                    'error'   => 'خطأ أثناء حفظ بيانات الركاب.'
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
             }
@@ -124,7 +125,7 @@ try {
 
     echo json_encode([
         'success' => false,
-        'error'   => 'خطأ في قاعدة البيانات: ' . $e->getMessage()
+        'error'   => 'خطأ في قاعدة البيانات.'
     ], JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     if ($con->inTransaction()) {
@@ -133,6 +134,6 @@ try {
 
     echo json_encode([
         'success' => false,
-        'error'   => 'خطأ غير متوقع: ' . $e->getMessage()
+        'error'   => 'خطأ غير متوقع.'
     ], JSON_UNESCAPED_UNICODE);
 }
