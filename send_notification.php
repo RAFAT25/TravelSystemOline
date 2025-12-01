@@ -5,8 +5,8 @@ require 'connect.php'; // يحتوي على $con
 
 // إعدادات Firebase
 $serviceAccountPath = __DIR__ . 'firebase-service-account.json'; // عدّل المسار لو مختلف
-$projectId          = '
-unified-adviser-408114'; // ضع هنا Project ID من Firebase
+$projectId = 'unified-adviser-408114';
+// ضع هنا Project ID من Firebase
 
 $user_id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
 $title   = $_POST['title'] ?? 'Test title';
