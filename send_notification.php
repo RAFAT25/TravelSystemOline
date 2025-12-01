@@ -4,7 +4,7 @@ header('Content-Type: application/json; charset=utf-8');
 require 'connect.php'; // يحتوي على $con
 
 // إعدادات Firebase
-$serviceAccountPath = __DIR__ . '/config/firebase-service-account.json'; // عدّل المسار لو مختلف
+$serviceAccountPath = __DIR__ . './config/firebase-service-account.json'; // عدّل المسار لو مختلف
 $projectId          = '
 unified-adviser-408114'; // ضع هنا Project ID من Firebase
 
