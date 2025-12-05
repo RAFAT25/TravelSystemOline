@@ -35,7 +35,7 @@ try {
 
     // تحديث رقم الهاتف إن تم إرساله
     if ($phone !== '') {
-        $fieldsToUpdate[] = "phone = :phone";
+        $fieldsToUpdate[] = "phone_number = :phone";
         $params[':phone'] = $phone;
     }
 
@@ -69,7 +69,7 @@ try {
     echo json_encode([
         "success"    => true,
         "message"    => "تم تحديث البيانات بنجاح",
-        "user_phone" => $phone !== '' ? $phone : $user['phone'],
+        "user_phone" => $phone !== '' ? $phone : $user['phone_number'],
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
