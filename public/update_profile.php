@@ -21,7 +21,7 @@ try {
     }
 
     // اجلب المستخدم الحالي
-    $stmt = $con->prepare("SELECT user_id, phone, password_hash FROM users WHERE user_id = :id");
+    $stmt = $con->prepare("SELECT user_id, phone_number, password_hash FROM users WHERE user_id = :id");
     $stmt->execute([':id' => $userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
