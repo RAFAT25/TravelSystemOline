@@ -1,53 +1,82 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-
-// الاتصال بقاعدة البيانات
-require_once 'connect.php'; // يحتوي على $con = new PDO(...);
+include "connect.php"; // PDO في $con
 
 try {
-    $raw = file_get_contents('php://input');
-    $data = json_decode($raw, true);
+    $input = file_get_contents('php://input');
+    $data  = json_decode($input, true);
 
-    if (!$data) {
-        echo json_encode([
-            'success' => false,
-            'error'   => 'بيانات غير صالحة (JSON)'
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    // استلام البيانات من Flutter
     $user_id        = isset($data['user_id']) ? (int)$data['user_id'] : 0;
     $trip_id        = isset($data['trip_id']) ? (int)$data['trip_id'] : 0;
     $total_price    = isset($data['total_price']) ? (float)$data['total_price'] : 0;
-    $payment_method = isset($data['payment_method']) ? $data['payment_method'] : 'Cash'; // افتراضياً كاش
+    $payment_method = isset($data['payment_method']) ? trim($data['payment_method']) : 'Cash';
     $passengers     = isset($data['passengers']) && is_array($data['passengers']) ? $data['passengers'] : [];
-
-    /*
-      مثال لـ passengers:
-      "passengers": [
-        {"name": "أحمد", "seat_id": 5},
-        {"name": "خالد", "seat_id": 6}
-      ]
-    */
 
     if ($user_id <= 0 || $trip_id <= 0 || empty($passengers)) {
         echo json_encode([
-            'success' => false,
-            'error'   => 'user_id أو trip_id أو قائمة الركاب غير صحيحة'
+            "success" => false,
+            "error"   => "user_id, trip_id و passengers مطلوبة"
         ], JSON_UNESCAPED_UNICODE);
-        exit;
+        exit();
     }
 
-    // بدء Transaction
     $con->beginTransaction();
 
-    // إنشاء Booking بحالة Pending + Unpaid (لم يتم الانتقال لشاشة الدفع بعد)
+    $seatCodes = array_map(function ($p) {
+        return isset($p['seat_code']) ? trim($p['seat_code']) : '';
+    }, $passengers);
+    $seatCodes = array_values(array_filter($seatCodes, fn($c) => $c !== ''));
+
+    if (empty($seatCodes)) {
+        throw new Exception("لا توجد مقاعد صحيحة في passengers");
+    }
+
+    $inPlaceholders = implode(',', array_fill(0, count($seatCodes), '?'));
+    $sqlSeats = "
+        SELECT s.seat_id, s.seat_number
+        FROM trips t
+        JOIN buses b ON b.bus_id = t.bus_id
+        JOIN seats s ON s.bus_id = b.bus_id
+        WHERE t.trip_id = ?
+          AND s.seat_number IN ($inPlaceholders)
+    ";
+    $stmtSeats = $con->prepare($sqlSeats);
+    $params    = array_merge([$trip_id], $seatCodes);
+    $stmtSeats->execute($params);
+    $rowsSeats = $stmtSeats->fetchAll(PDO::FETCH_ASSOC);
+
+    if (count($rowsSeats) !== count($seatCodes)) {
+        throw new Exception("بعض أرقام المقاعد غير موجودة في هذه الرحلة");
+    }
+
+    $codeToId = [];
+    foreach ($rowsSeats as $row) {
+        $codeToId[$row['seat_number']] = (int)$row['seat_id'];
+    }
+
+    $seatIds    = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
+    $inSeatIds  = implode(',', array_fill(0, count($seatIds), '?'));
+    $sqlCheck   = "
+        SELECT ps.seat_id
+        FROM bookings b
+        JOIN passengers ps ON ps.booking_id = b.booking_id
+        WHERE b.trip_id = ?
+          AND ps.seat_id IN ($inSeatIds)
+        FOR UPDATE
+    ";
+    $stmtCheck  = $con->prepare($sqlCheck);
+    $paramsCheck = array_merge([$trip_id], $seatIds);
+    $stmtCheck->execute($paramsCheck);
+    $taken = $stmtCheck->fetchAll(PDO::FETCH_COLUMN);
+
+    if (!empty($taken)) {
+        $takenIds = implode(',', $taken);
+        throw new Exception("بعض المقاعد المختارة محجوزة مسبقاً: seat_id = $takenIds");
+    }
+
     $sqlBooking = "
-        INSERT INTO Bookings
-            (user_id, trip_id, total_price, booking_status, payment_method, payment_status, booking_date)
-        VALUES
-            (:user_id, :trip_id, :total_price, 'Pending', :payment_method, 'Unpaid', NOW())
+        INSERT INTO bookings (user_id, trip_id, total_price, payment_method, payment_status, booking_date)
+        VALUES (:user_id, :trip_id, :total_price, :payment_method, :payment_status, NOW())
     ";
     $stmtBooking = $con->prepare($sqlBooking);
     $stmtBooking->execute([
@@ -55,85 +84,53 @@ try {
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
         ':payment_method' => $payment_method,
+        ':payment_status' => 'pending',
     ]);
-
     $booking_id = (int)$con->lastInsertId();
 
-    // إدخال الركاب والمقاعد
     $sqlPassenger = "
-        INSERT INTO Passengers
-            (booking_id, name, seat_id, trip_id)
-        VALUES
-            (:booking_id, :name, :seat_id, :trip_id)
+        INSERT INTO passengers (booking_id, full_name, id_number, seat_id)
+        VALUES (:booking_id, :full_name, :id_number, :seat_id)
     ";
     $stmtPassenger = $con->prepare($sqlPassenger);
 
     foreach ($passengers as $p) {
-        $name    = isset($p['name'])    ? trim($p['name'])    : '';
-        $seat_id = isset($p['seat_id']) ? (int)$p['seat_id']  : 0;
+        $full_name = isset($p['full_name']) ? trim($p['full_name']) : '';
+        $id_number = isset($p['id_number']) ? trim($p['id_number']) : '';
+        $seat_code = isset($p['seat_code']) ? trim($p['seat_code']) : '';
 
-        if ($name === '' || $seat_id <= 0) {
-            $con->rollBack();
-            echo json_encode([
-                'success' => false,
-                'error'   => 'بيانات راكب غير صالحة'
-            ], JSON_UNESCAPED_UNICODE);
-            exit;
+        if ($full_name === '' || $seat_code === '') {
+            throw new Exception("كل راكب يحتاج اسم كامل و seat_code");
+        }
+        if (!isset($codeToId[$seat_code])) {
+            throw new Exception("مقعد غير معروف: $seat_code");
         }
 
-        try {
-            $stmtPassenger->execute([
-                ':booking_id' => $booking_id,
-                ':name'       => $name,
-                ':seat_id'    => $seat_id,
-                ':trip_id'    => $trip_id,
-            ]);
-        } catch (PDOException $e) {
-            // PostgreSQL: كود الخطأ 23505 يعني unique_violation
-            if ($e->getCode() === '23505') {
-                // حجز مكرر لنفس المقعد (trip_id, seat_id) بسبب uq_trip_seat
-                $con->rollBack();
-                echo json_encode([
-                    'success' => false,
-                    'error'   => 'هذا المقعد تم حجزه بالفعل من قبل عميل آخر. الرجاء تحديث المقاعد واختيار مقعد آخر.'
-                ], JSON_UNESCAPED_UNICODE);
-                exit;
-            } else {
-                $con->rollBack();
-                echo json_encode([
-                    'success' => false,
-                    'error'   => 'خطأ أثناء حفظ بيانات الركاب.'
-                ], JSON_UNESCAPED_UNICODE);
-                exit;
-            }
-        }
+        $seat_id = $codeToId[$seat_code];
+
+        $stmtPassenger->execute([
+            ':booking_id' => $booking_id,
+            ':full_name'  => $full_name,
+            ':id_number'  => $id_number,
+            ':seat_id'    => $seat_id,
+        ]);
     }
 
-    // إكمال المعاملة
     $con->commit();
 
     echo json_encode([
-        'success'    => true,
-        'booking_id' => $booking_id,
-        'message'    => 'تم حجز المقاعد بنجاح، والحجز في حالة انتظار الدفع'
+        "success"     => true,
+        "booking_id"  => $booking_id,
+        "trip_id"     => $trip_id,
+        "total_price" => $total_price,
     ], JSON_UNESCAPED_UNICODE);
 
-} catch (PDOException $e) {
-    if ($con->inTransaction()) {
-        $con->rollBack();
-    }
-
-    echo json_encode([
-        'success' => false,
-        'error'   => 'خطأ في قاعدة البيانات.'
-    ], JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     if ($con->inTransaction()) {
         $con->rollBack();
     }
-
     echo json_encode([
-        'success' => false,
-        'error'   => 'خطأ غير متوقع.'
+        "success" => false,
+        "error"   => $e->getMessage(),
     ], JSON_UNESCAPED_UNICODE);
 }
