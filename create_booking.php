@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // PDO في $con
+include "connect.php"; // PDO في $con (PostgreSQL)
 
 try {
     $input = file_get_contents('php://input');
@@ -22,6 +22,7 @@ try {
 
     $con->beginTransaction();
 
+    // تجهيز seat_code
     $seatCodes = array_map(function ($p) {
         return isset($p['seat_code']) ? trim($p['seat_code']) : '';
     }, $passengers);
@@ -31,6 +32,7 @@ try {
         throw new Exception("لا توجد مقاعد صحيحة في passengers");
     }
 
+    // جلب seat_id لكل مقعد في هذه الرحلة
     $inPlaceholders = implode(',', array_fill(0, count($seatCodes), '?'));
     $sqlSeats = "
         SELECT s.seat_id, s.seat_number
@@ -54,9 +56,11 @@ try {
         $codeToId[$row['seat_number']] = (int)$row['seat_id'];
     }
 
-    $seatIds    = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
-    $inSeatIds  = implode(',', array_fill(0, count($seatIds), '?'));
-    $sqlCheck   = "
+    // منع الحجز المزدوج
+    $seatIds   = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
+    $inSeatIds = implode(',', array_fill(0, count($seatIds), '?'));
+
+    $sqlCheck = "
         SELECT ps.seat_id
         FROM bookings b
         JOIN passengers ps ON ps.booking_id = b.booking_id
@@ -64,7 +68,7 @@ try {
           AND ps.seat_id IN ($inSeatIds)
         FOR UPDATE
     ";
-    $stmtCheck  = $con->prepare($sqlCheck);
+    $stmtCheck   = $con->prepare($sqlCheck);
     $paramsCheck = array_merge([$trip_id], $seatIds);
     $stmtCheck->execute($paramsCheck);
     $taken = $stmtCheck->fetchAll(PDO::FETCH_COLUMN);
@@ -74,20 +78,43 @@ try {
         throw new Exception("بعض المقاعد المختارة محجوزة مسبقاً: seat_id = $takenIds");
     }
 
+    // INSERT في bookings
+    // booking_status_enum: نستخدم 'Pending'
+    // payment_status_enum: نستخدم 'Unpaid' في البداية، وسيتم تحديثها لاحقاً في API الدفع
     $sqlBooking = "
-        INSERT INTO bookings (user_id, trip_id, total_price, payment_method, payment_status, booking_date)
-        VALUES (:user_id, :trip_id, :total_price, :payment_method, :payment_status, NOW())
+        INSERT INTO bookings (
+            user_id,
+            trip_id,
+            total_price,
+            booking_status,
+            payment_method,
+            payment_status,
+            booking_date
+        )
+        VALUES (
+            :user_id,
+            :trip_id,
+            :total_price,
+            :booking_status,
+            :payment_method,
+            :payment_status,
+            CURRENT_TIMESTAMP
+        )
+        RETURNING booking_id
     ";
     $stmtBooking = $con->prepare($sqlBooking);
     $stmtBooking->execute([
         ':user_id'        => $user_id,
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
-        ':payment_method' => $payment_method,
-        ':payment_status' => 'Paid',
+        ':booking_status' => 'Pending', // من booking_status_enum
+        ':payment_method' => $payment_method, // يجب أن تكون قيمة موجودة في payment_method_enum
+        ':payment_status' => 'Unpaid',  // من payment_status_enum
     ]);
-    $booking_id = (int)$con->lastInsertId();
+    // في PostgreSQL الأفضل استخدام RETURNING
+    $booking_id = (int)$stmtBooking->fetchColumn();
 
+    // INSERT الركاب
     $sqlPassenger = "
         INSERT INTO passengers (booking_id, full_name, id_number, seat_id)
         VALUES (:booking_id, :full_name, :id_number, :seat_id)
