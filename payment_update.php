@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php";
+include "connect.php"; // PDO PostgreSQL في $con
 
 try {
     $input = file_get_contents('php://input');
@@ -19,11 +19,22 @@ try {
         exit();
     }
 
-    $allowed = ['pending', 'paid', 'failed'];
-    if (!in_array($payment_status, $allowed, true)) {
+    // enum قيم حالة الدفع
+    $allowedStatus = ['Unpaid', 'Paid', 'Refunded', 'Failed'];
+    if (!in_array($payment_status, $allowedStatus, true)) {
         echo json_encode([
             "success" => false,
             "error"   => "قيمة payment_status غير صحيحة"
+        ], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
+
+    // enum قيم طريقة الدفع (عدّل حسب تعريفك في DB)
+    $allowedMethods = ['Cash', 'Card', 'Online', 'Wallet'];
+    if ($payment_method !== '' && !in_array($payment_method, $allowedMethods, true)) {
+        echo json_encode([
+            "success" => false,
+            "error"   => "قيمة payment_method غير صحيحة"
         ], JSON_UNESCAPED_UNICODE);
         exit();
     }
@@ -32,7 +43,11 @@ try {
         UPDATE bookings
         SET payment_status = :status,
             payment_method = COALESCE(NULLIF(:method, ''), payment_method),
-            transaction_id = COALESCE(NULLIF(:txn, ''), transaction_id)
+            payment_timestamp = CASE 
+                                   WHEN :status = 'Paid' THEN CURRENT_TIMESTAMP 
+                                   ELSE payment_timestamp 
+                                END,
+            gateway_transaction_id = COALESCE(NULLIF(:txn, ''), gateway_transaction_id)
         WHERE booking_id = :booking_id
     ";
 
