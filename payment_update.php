@@ -19,8 +19,8 @@ try {
         exit();
     }
 
-    // enum قيم حالة الدفع
-    $allowedStatus = ['Unpaid', 'Paid', 'Refunded', 'Failed'];
+    // enum قيم حالة الدفع (مطابقة لـ payment_status_enum في DB)
+    $allowedStatus = ['Unpaid', 'Paid', 'Refunded'];
     if (!in_array($payment_status, $allowedStatus, true)) {
         echo json_encode([
             "success" => false,
@@ -29,8 +29,8 @@ try {
         exit();
     }
 
-    // enum قيم طريقة الدفع (عدّل حسب تعريفك في DB)
-    $allowedMethods = ['Cash', 'Card', 'Online', 'Wallet'];
+    // enum قيم طريقة الدفع (payment_method_enum): Electronic, Cash, Kareemi
+    $allowedMethods = ['Electronic', 'Cash', 'Kareemi'];
     if ($payment_method !== '' && !in_array($payment_method, $allowedMethods, true)) {
         echo json_encode([
             "success" => false,
