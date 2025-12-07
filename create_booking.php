@@ -84,7 +84,7 @@ try {
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
         ':payment_method' => $payment_method,
-        ':payment_status' => 'pending',
+        ':payment_status' => 'Paid',
     ]);
     $booking_id = (int)$con->lastInsertId();
 
