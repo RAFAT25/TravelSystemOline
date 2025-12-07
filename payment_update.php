@@ -41,7 +41,7 @@ try {
 
     $sql = "
         UPDATE bookings
-        SET payment_status = :status,
+        SET payment_status = :status::payment_status_enum,
             payment_method = COALESCE(
                                 NULLIF(:method, '')::payment_method_enum,
                                 payment_method
