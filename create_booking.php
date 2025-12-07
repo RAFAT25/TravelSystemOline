@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // PDO في $con (PostgreSQL)
+include "connect.php"; // PDO PostgreSQL في $con
 
 try {
     $input = file_get_contents('php://input');
@@ -22,7 +22,7 @@ try {
 
     $con->beginTransaction();
 
-    // تجهيز seat_code
+    // 1) تجهيز seat_code
     $seatCodes = array_map(function ($p) {
         return isset($p['seat_code']) ? trim($p['seat_code']) : '';
     }, $passengers);
@@ -32,7 +32,7 @@ try {
         throw new Exception("لا توجد مقاعد صحيحة في passengers");
     }
 
-    // جلب seat_id لكل مقعد في هذه الرحلة
+    // 2) جلب seat_id لكل مقعد في هذه الرحلة
     $inPlaceholders = implode(',', array_fill(0, count($seatCodes), '?'));
     $sqlSeats = "
         SELECT s.seat_id, s.seat_number
@@ -56,7 +56,7 @@ try {
         $codeToId[$row['seat_number']] = (int)$row['seat_id'];
     }
 
-    // منع الحجز المزدوج
+    // 3) منع الحجز المزدوج للمقاعد
     $seatIds   = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
     $inSeatIds = implode(',', array_fill(0, count($seatIds), '?'));
 
@@ -78,9 +78,9 @@ try {
         throw new Exception("بعض المقاعد المختارة محجوزة مسبقاً: seat_id = $takenIds");
     }
 
-    // INSERT في bookings
-    // booking_status_enum: نستخدم 'Pending'
-    // payment_status_enum: نستخدم 'Unpaid' في البداية، وسيتم تحديثها لاحقاً في API الدفع
+    // 4) إنشاء الحجز في bookings
+    // booking_status_enum: Pending
+    // payment_status_enum: Unpaid في البداية
     $sqlBooking = "
         INSERT INTO bookings (
             user_id,
@@ -107,24 +107,44 @@ try {
         ':user_id'        => $user_id,
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
-        ':booking_status' => 'Pending', // من booking_status_enum
-        ':payment_method' => $payment_method, // يجب أن تكون قيمة موجودة في payment_method_enum
-        ':payment_status' => 'Unpaid',  // من payment_status_enum
+        ':booking_status' => 'Pending', // booking_status_enum
+        ':payment_method' => $payment_method, // payment_method_enum مثل 'Cash'
+        ':payment_status' => 'Unpaid',  // payment_status_enum
     ]);
-    // في PostgreSQL الأفضل استخدام RETURNING
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    // INSERT الركاب
+    // 5) إدخال الركاب في passengers (مع trip_id وباقي الحقول)
     $sqlPassenger = "
-        INSERT INTO passengers (booking_id, full_name, id_number, seat_id)
-        VALUES (:booking_id, :full_name, :id_number, :seat_id)
+        INSERT INTO passengers (
+            booking_id,
+            full_name,
+            id_number,
+            seat_id,
+            trip_id,
+            gender,
+            birth_date,
+            phone_number
+        )
+        VALUES (
+            :booking_id,
+            :full_name,
+            :id_number,
+            :seat_id,
+            :trip_id,
+            :gender,
+            :birth_date,
+            :phone_number
+        )
     ";
     $stmtPassenger = $con->prepare($sqlPassenger);
 
     foreach ($passengers as $p) {
-        $full_name = isset($p['full_name']) ? trim($p['full_name']) : '';
-        $id_number = isset($p['id_number']) ? trim($p['id_number']) : '';
-        $seat_code = isset($p['seat_code']) ? trim($p['seat_code']) : '';
+        $full_name    = isset($p['full_name']) ? trim($p['full_name']) : '';
+        $id_number    = isset($p['id_number']) ? trim($p['id_number']) : '';
+        $seat_code    = isset($p['seat_code']) ? trim($p['seat_code']) : '';
+        $gender       = isset($p['gender']) ? trim($p['gender']) : null;        // gender_enum
+        $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null; // YYYY-MM-DD
+        $phone_number = isset($p['phone_number']) ? trim($p['phone_number']) : null;
 
         if ($full_name === '' || $seat_code === '') {
             throw new Exception("كل راكب يحتاج اسم كامل و seat_code");
@@ -136,10 +156,14 @@ try {
         $seat_id = $codeToId[$seat_code];
 
         $stmtPassenger->execute([
-            ':booking_id' => $booking_id,
-            ':full_name'  => $full_name,
-            ':id_number'  => $id_number,
-            ':seat_id'    => $seat_id,
+            ':booking_id'   => $booking_id,
+            ':full_name'    => $full_name,
+            ':id_number'    => $id_number,
+            ':seat_id'      => $seat_id,
+            ':trip_id'      => $trip_id,
+            ':gender'       => $gender,
+            ':birth_date'   => $birth_date,
+            ':phone_number' => $phone_number,
         ]);
     }
 
