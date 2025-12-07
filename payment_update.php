@@ -42,7 +42,10 @@ try {
     $sql = "
         UPDATE bookings
         SET payment_status = :status,
-            payment_method = COALESCE(NULLIF(:method, ''), payment_method),
+            payment_method = COALESCE(
+                                NULLIF(:method, '')::payment_method_enum,
+                                payment_method
+                             ),
             payment_timestamp = CASE 
                                    WHEN :status = 'Paid' THEN CURRENT_TIMESTAMP 
                                    ELSE payment_timestamp 
