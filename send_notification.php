@@ -1,16 +1,19 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
 
-require 'connect.php'; // يحتوي على $con
+require 'connect.php'; // يحتوي على $con (PDO PostgreSQL/MySQL)
 
 // إعدادات Firebase
 $serviceAccountPath = __DIR__ . '/firebase-service-account.json'; // تأكد من الاسم والمكان
 $projectId = 'unified-adviser-408114'; // Project ID من Firebase Console
 
-// بيانات الطلب
-$user_id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
-$title   = $_POST['title'] ?? 'Test title';
-$body    = $_POST['body']  ?? 'Test body';
+// 0) قراءة JSON من جسم الطلب
+$input = file_get_contents('php://input');
+$data  = json_decode($input, true);
+
+$user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+$title   = isset($data['title'])   ? trim($data['title'])   : 'Test title';
+$body    = isset($data['body'])    ? trim($data['body'])    : 'Test body';
 
 if ($user_id <= 0) {
     http_response_code(400);
@@ -61,7 +64,7 @@ function getAccessToken($serviceAccountPath)
     }
 
     $now         = time();
-    $expires     = $now + 3600;
+    $expires     = $now + 3600; // صلاحية ساعة
     $privateKey  = $jsonKey['private_key'];
     $clientEmail = $jsonKey['client_email'];
 
@@ -113,7 +116,7 @@ function getAccessToken($serviceAccountPath)
     return $data['access_token'];
 }
 
-// الحصول على access_token
+// 2.1) الحصول على access_token
 try {
     $accessToken = getAccessToken($serviceAccountPath);
 } catch (Exception $e) {
@@ -141,7 +144,7 @@ $message = [
 
 $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
 
-// إرسال الطلب إلى FCM
+// 4) إرسال الطلب إلى FCM
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);
 curl_setopt($ch, CURLOPT_POST, true);
@@ -170,6 +173,6 @@ curl_close($ch);
 echo json_encode([
     'status'   => $httpCode === 200 ? 'ok' : 'error',
     'httpCode' => $httpCode,
-    'raw'      => $result,                 // النص الخام من FCM لمساعدتك في debug
+    'raw'      => $result,                 // الرد الخام من FCM ليسهل الـ debug
     'response' => json_decode($result, true),
 ], JSON_UNESCAPED_UNICODE);
