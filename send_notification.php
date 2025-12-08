@@ -4,7 +4,7 @@ header('Content-Type: application/json; charset=utf-8');
 require 'connect.php'; // يحتوي على $con (PDO PostgreSQL/MySQL)
 
 // إعدادات Firebase
-$serviceAccountPath = __DIR__ . '/config/firebase-service-account.json';
+$serviceAccountPath = __DIR__ . '/config/unified-adviser-408114-firebase-adminsdk-hcjoe-dea9fa958b.json';
 
 $projectId = 'unified-adviser-408114'; // Project ID من Firebase Console
 
