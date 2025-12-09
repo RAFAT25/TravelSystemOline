@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // اتصال PDO في المتغير $con
+include "connect.php"; // اتصال PDO في $con
 
 try {
     $input = file_get_contents('php://input');
@@ -111,7 +111,7 @@ try {
     ]);
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    // 5) إدخال الركاب في passengers
+    // 5) إدخال الركاب في passengers (مع id_image)
     $sqlPassenger = "
         INSERT INTO passengers (
             booking_id,
@@ -121,7 +121,8 @@ try {
             trip_id,
             gender,
             birth_date,
-            phone_number
+            phone_number,
+            id_image
         )
         VALUES (
             :booking_id,
@@ -131,7 +132,8 @@ try {
             :trip_id,
             :gender,
             :birth_date,
-            :phone_number
+            :phone_number,
+            :id_image
         )
     ";
     $stmtPassenger = $con->prepare($sqlPassenger);
@@ -143,6 +145,7 @@ try {
         $gender       = isset($p['gender']) ? trim($p['gender']) : null;
         $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null; // YYYY-MM-DD
         $phone_number = isset($p['phone_number']) ? trim($p['phone_number']) : null;
+        $id_image     = isset($p['id_image']) ? trim($p['id_image']) : null;     // رابط أو مسار الصورة
 
         if ($full_name === '' || $seat_code === '') {
             throw new Exception("كل راكب يحتاج اسم كامل و seat_code");
@@ -162,6 +165,7 @@ try {
             ':gender'       => $gender,
             ':birth_date'   => $birth_date,
             ':phone_number' => $phone_number,
+            ':id_image'     => $id_image,
         ]);
     }
 
