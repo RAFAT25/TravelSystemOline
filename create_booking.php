@@ -111,7 +111,7 @@ try {
     ]);
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    // 5) إدخال الركاب في passengers (مع id_image)
+    // 5) إدخال الركاب في passengers (مع id_image كـ bytea)
     $sqlPassenger = "
         INSERT INTO passengers (
             booking_id,
@@ -145,7 +145,7 @@ try {
         $gender       = isset($p['gender']) ? trim($p['gender']) : null;
         $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null; // YYYY-MM-DD
         $phone_number = isset($p['phone_number']) ? trim($p['phone_number']) : null;
-        $id_image     = isset($p['id_image']) ? trim($p['id_image']) : null;     // رابط أو مسار الصورة
+        $id_image_b64 = isset($p['id_image']) ? trim($p['id_image']) : null;
 
         if ($full_name === '' || $seat_code === '') {
             throw new Exception("كل راكب يحتاج اسم كامل و seat_code");
@@ -154,7 +154,15 @@ try {
             throw new Exception("مقعد غير معروف: $seat_code");
         }
 
-        $seat_id = $codeToId[$seat_code];
+        $seat_id      = $codeToId[$seat_code];
+        $id_image_bin = null;
+
+        if (!empty($id_image_b64)) {
+            $id_image_bin = base64_decode($id_image_b64);
+            if ($id_image_bin === false) {
+                throw new Exception("فشل في فك ترميز صورة الهوية للراكب: " . $full_name);
+            }
+        }
 
         $stmtPassenger->execute([
             ':booking_id'   => $booking_id,
@@ -165,7 +173,7 @@ try {
             ':gender'       => $gender,
             ':birth_date'   => $birth_date,
             ':phone_number' => $phone_number,
-            ':id_image'     => $id_image,
+            ':id_image'     => $id_image_bin, // يُخزَّن في bytea
         ]);
     }
 
