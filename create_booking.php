@@ -1,6 +1,6 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // PDO PostgreSQL في $con
+include "connect.php"; // اتصال PDO في المتغير $con
 
 try {
     $input = file_get_contents('php://input');
@@ -17,12 +17,12 @@ try {
             "success" => false,
             "error"   => "user_id, trip_id و passengers مطلوبة"
         ], JSON_UNESCAPED_UNICODE);
-        exit();
+        exit;
     }
 
     $con->beginTransaction();
 
-    // 1) تجهيز seat_code
+    // 1) جمع seat_code من الركاب
     $seatCodes = array_map(function ($p) {
         return isset($p['seat_code']) ? trim($p['seat_code']) : '';
     }, $passengers);
@@ -79,8 +79,6 @@ try {
     }
 
     // 4) إنشاء الحجز في bookings
-    // booking_status_enum: Pending
-    // payment_status_enum: Unpaid في البداية
     $sqlBooking = "
         INSERT INTO bookings (
             user_id,
@@ -108,12 +106,12 @@ try {
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
         ':booking_status' => 'Pending', // booking_status_enum
-        ':payment_method' => $payment_method, // payment_method_enum مثل 'Cash'
+        ':payment_method' => $payment_method, // payment_method_enum
         ':payment_status' => 'Unpaid',  // payment_status_enum
     ]);
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    // 5) إدخال الركاب في passengers (مع trip_id وباقي الحقول)
+    // 5) إدخال الركاب في passengers
     $sqlPassenger = "
         INSERT INTO passengers (
             booking_id,
@@ -142,7 +140,7 @@ try {
         $full_name    = isset($p['full_name']) ? trim($p['full_name']) : '';
         $id_number    = isset($p['id_number']) ? trim($p['id_number']) : '';
         $seat_code    = isset($p['seat_code']) ? trim($p['seat_code']) : '';
-        $gender       = isset($p['gender']) ? trim($p['gender']) : null;        // gender_enum
+        $gender       = isset($p['gender']) ? trim($p['gender']) : null;
         $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null; // YYYY-MM-DD
         $phone_number = isset($p['phone_number']) ? trim($p['phone_number']) : null;
 
@@ -166,6 +164,16 @@ try {
             ':phone_number' => $phone_number,
         ]);
     }
+
+    // 6) تحديث حالة المقاعد إلى غير متاحة is_available = FALSE
+    $inSeatIdsForUpdate = implode(',', array_fill(0, count($seatIds), '?'));
+    $sqlUpdateSeats = "
+        UPDATE seats
+        SET is_available = FALSE
+        WHERE seat_id IN ($inSeatIdsForUpdate)
+    ";
+    $stmtUpdateSeats = $con->prepare($sqlUpdateSeats);
+    $stmtUpdateSeats->execute($seatIds);
 
     $con->commit();
 
