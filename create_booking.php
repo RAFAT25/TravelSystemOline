@@ -176,9 +176,16 @@ try {
         $id_image_bin = null;
 
         if (!empty($id_image_b64)) {
-            $id_image_bin = base64_decode($id_image_b64);
+            // إزالة أي header من نوع data:image/... إن وجد
+            if (str_starts_with($id_image_b64, 'data:')) {
+                $parts = explode(',', $id_image_b64, 2);
+                $id_image_b64 = $parts[1] ?? '';
+            }
+
+            // strict base64: يرجع false لو السلسلة غير صالحة
+            $id_image_bin = base64_decode($id_image_b64, true);
             if ($id_image_bin === false) {
-                throw new Exception("فشل في فك ترميز صورة الهوية للراكب: " . $full_name);
+                throw new Exception("Base64 غير صالح لصورة الهوية للراكب: " . $full_name);
             }
         }
 
