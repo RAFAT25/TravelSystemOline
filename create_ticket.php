@@ -29,7 +29,7 @@ try {
         VALUES (:user_id, :issue_type, :title, :description)
         RETURNING ticket_id, user_id, issue_type, title, description, status, priority, created_at";
 
-    $stmt = $pdo->prepare($sql);
+    $stmt = $con->prepare($sql);
     $stmt->execute([
         ':user_id'    => $user_id,
         ':issue_type' => $issue_type,
