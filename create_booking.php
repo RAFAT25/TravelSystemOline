@@ -1,28 +1,33 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // اتصال PDO في $con
+require_once 'connect.php'; // يجب أن يعرّف $con = new PDO(...);
 
 try {
+    // قراءة JSON من Flutter
     $input = file_get_contents('php://input');
     $data  = json_decode($input, true);
 
-    $user_id        = isset($data['user_id']) ? (int)$data['user_id'] : 0;
-    $trip_id        = isset($data['trip_id']) ? (int)$data['trip_id'] : 0;
-    $total_price    = isset($data['total_price']) ? (float)$data['total_price'] : 0;
+    $user_id        = isset($data['user_id'])        ? (int)$data['user_id']        : 0;
+    $trip_id        = isset($data['trip_id'])        ? (int)$data['trip_id']        : 0;
+    $total_price    = isset($data['total_price'])    ? (float)$data['total_price']  : 0;
     $payment_method = isset($data['payment_method']) ? trim($data['payment_method']) : 'Cash';
-    $passengers     = isset($data['passengers']) && is_array($data['passengers']) ? $data['passengers'] : [];
+    $passengers     = (isset($data['passengers']) && is_array($data['passengers']))
+                        ? $data['passengers'] : [];
 
+    // تحقق من الحقول الأساسية
     if ($user_id <= 0 || $trip_id <= 0 || empty($passengers)) {
         echo json_encode([
             "success" => false,
-            "error"   => "user_id, trip_id و passengers مطلوبة"
+            "error"   => "user_id, trip_id و passengers مطلوبة",
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $con->beginTransaction();
 
-    // 1) جمع seat_code من الركاب
+    /**********************
+     * 1) استخراج seat_code
+     **********************/
     $seatCodes = array_map(function ($p) {
         return isset($p['seat_code']) ? trim($p['seat_code']) : '';
     }, $passengers);
@@ -32,8 +37,11 @@ try {
         throw new Exception("لا توجد مقاعد صحيحة في passengers");
     }
 
-    // 2) جلب seat_id لكل مقعد في هذه الرحلة
+    /***********************************************
+     * 2) جلب seat_id لكل مقعد في هذه الرحلة
+     ***********************************************/
     $inPlaceholders = implode(',', array_fill(0, count($seatCodes), '?'));
+
     $sqlSeats = "
         SELECT s.seat_id, s.seat_number
         FROM trips t
@@ -42,6 +50,7 @@ try {
         WHERE t.trip_id = ?
           AND s.seat_number IN ($inPlaceholders)
     ";
+
     $stmtSeats = $con->prepare($sqlSeats);
     $params    = array_merge([$trip_id], $seatCodes);
     $stmtSeats->execute($params);
@@ -56,7 +65,9 @@ try {
         $codeToId[$row['seat_number']] = (int)$row['seat_id'];
     }
 
-    // 3) منع الحجز المزدوج للمقاعد
+    /***********************************************
+     * 3) منع الحجز المزدوج للمقاعد (Seat Lock)
+     ***********************************************/
     $seatIds   = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
     $inSeatIds = implode(',', array_fill(0, count($seatIds), '?'));
 
@@ -68,6 +79,7 @@ try {
           AND ps.seat_id IN ($inSeatIds)
         FOR UPDATE
     ";
+
     $stmtCheck   = $con->prepare($sqlCheck);
     $paramsCheck = array_merge([$trip_id], $seatIds);
     $stmtCheck->execute($paramsCheck);
@@ -78,7 +90,9 @@ try {
         throw new Exception("بعض المقاعد المختارة محجوزة مسبقاً: seat_id = $takenIds");
     }
 
-    // 4) إنشاء الحجز في bookings
+    /**************************
+     * 4) إنشاء الحجز bookings
+     **************************/
     $sqlBooking = "
         INSERT INTO bookings (
             user_id,
@@ -100,6 +114,7 @@ try {
         )
         RETURNING booking_id
     ";
+
     $stmtBooking = $con->prepare($sqlBooking);
     $stmtBooking->execute([
         ':user_id'        => $user_id,
@@ -111,7 +126,9 @@ try {
     ]);
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    // 5) إدخال الركاب في passengers (مع id_image كـ bytea)
+    /****************************************
+     * 5) إدخال الركاب passengers (id_image BYTEA)
+     ****************************************/
     $sqlPassenger = "
         INSERT INTO passengers (
             booking_id,
@@ -136,6 +153,7 @@ try {
             :id_image
         )
     ";
+
     $stmtPassenger = $con->prepare($sqlPassenger);
 
     foreach ($passengers as $p) {
@@ -173,11 +191,13 @@ try {
             ':gender'       => $gender,
             ':birth_date'   => $birth_date,
             ':phone_number' => $phone_number,
-            ':id_image'     => $id_image_bin, // يُخزَّن في bytea
+            ':id_image'     => $id_image_bin, // يخزن في BYTEA
         ]);
     }
 
-    // 6) تحديث حالة المقاعد إلى غير متاحة is_available = FALSE
+    /****************************************
+     * 6) تحديث حالة المقاعد إلى غير متاحة
+     ****************************************/
     $inSeatIdsForUpdate = implode(',', array_fill(0, count($seatIds), '?'));
     $sqlUpdateSeats = "
         UPDATE seats
