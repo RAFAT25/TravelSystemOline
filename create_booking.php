@@ -1,9 +1,8 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-require_once 'connect.php'; // يجب أن يعرّف $con = new PDO(...);
+require_once 'connect.php';
 
 try {
-    // قراءة JSON من Flutter
     $input = file_get_contents('php://input');
     $data  = json_decode($input, true);
 
@@ -14,7 +13,6 @@ try {
     $passengers     = (isset($data['passengers']) && is_array($data['passengers']))
                         ? $data['passengers'] : [];
 
-    // تحقق من الحقول الأساسية
     if ($user_id <= 0 || $trip_id <= 0 || empty($passengers)) {
         echo json_encode([
             "success" => false,
@@ -25,9 +23,7 @@ try {
 
     $con->beginTransaction();
 
-    /**********************
-     * 1) استخراج seat_code
-     **********************/
+    // 1) استخراج seat_code
     $seatCodes = array_map(function ($p) {
         return isset($p['seat_code']) ? trim($p['seat_code']) : '';
     }, $passengers);
@@ -37,9 +33,7 @@ try {
         throw new Exception("لا توجد مقاعد صحيحة في passengers");
     }
 
-    /***********************************************
-     * 2) جلب seat_id لكل مقعد في هذه الرحلة
-     ***********************************************/
+    // 2) جلب seat_id لكل مقعد في هذه الرحلة
     $inPlaceholders = implode(',', array_fill(0, count($seatCodes), '?'));
 
     $sqlSeats = "
@@ -65,9 +59,7 @@ try {
         $codeToId[$row['seat_number']] = (int)$row['seat_id'];
     }
 
-    /***********************************************
-     * 3) منع الحجز المزدوج للمقاعد (Seat Lock)
-     ***********************************************/
+    // 3) منع الحجز المزدوج
     $seatIds   = array_values(array_map(fn($code) => $codeToId[$code], $seatCodes));
     $inSeatIds = implode(',', array_fill(0, count($seatIds), '?'));
 
@@ -90,9 +82,7 @@ try {
         throw new Exception("بعض المقاعد المختارة محجوزة مسبقاً: seat_id = $takenIds");
     }
 
-    /**************************
-     * 4) إنشاء الحجز bookings
-     **************************/
+    // 4) إنشاء الحجز
     $sqlBooking = "
         INSERT INTO bookings (
             user_id,
@@ -120,15 +110,13 @@ try {
         ':user_id'        => $user_id,
         ':trip_id'        => $trip_id,
         ':total_price'    => $total_price,
-        ':booking_status' => 'Pending', // booking_status_enum
-        ':payment_method' => $payment_method, // payment_method_enum
-        ':payment_status' => 'Unpaid',  // payment_status_enum
+        ':booking_status' => 'Pending',
+        ':payment_method' => $payment_method,
+        ':payment_status' => 'Unpaid',
     ]);
     $booking_id = (int)$stmtBooking->fetchColumn();
 
-    /****************************************
-     * 5) إدخال الركاب passengers (id_image BYTEA)
-     ****************************************/
+    // 5) إدخال الركاب (id_image كنص Base64 في TEXT)
     $sqlPassenger = "
         INSERT INTO passengers (
             booking_id,
@@ -156,13 +144,19 @@ try {
 
     $stmtPassenger = $con->prepare($sqlPassenger);
 
+    // دالة لتأكيد UTF8 في النصوص
+    $toUtf8 = function ($v) {
+        if ($v === null) return null;
+        return mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+    };
+
     foreach ($passengers as $p) {
-        $full_name    = isset($p['full_name']) ? trim($p['full_name']) : '';
-        $id_number    = isset($p['id_number']) ? trim($p['id_number']) : '';
+        $full_name    = $toUtf8(isset($p['full_name']) ? trim($p['full_name']) : '');
+        $id_number    = $toUtf8(isset($p['id_number']) ? trim($p['id_number']) : '');
         $seat_code    = isset($p['seat_code']) ? trim($p['seat_code']) : '';
-        $gender       = isset($p['gender']) ? trim($p['gender']) : null;
-        $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null; // YYYY-MM-DD
-        $phone_number = isset($p['phone_number']) ? trim($p['phone_number']) : null;
+        $gender       = $toUtf8(isset($p['gender']) ? trim($p['gender']) : null);
+        $birth_date   = isset($p['birth_date']) ? trim($p['birth_date']) : null;
+        $phone_number = $toUtf8(isset($p['phone_number']) ? trim($p['phone_number']) : null);
         $id_image_b64 = isset($p['id_image']) ? trim($p['id_image']) : null;
 
         if ($full_name === '' || $seat_code === '') {
@@ -172,22 +166,7 @@ try {
             throw new Exception("مقعد غير معروف: $seat_code");
         }
 
-        $seat_id      = $codeToId[$seat_code];
-        $id_image_bin = null;
-
-        if (!empty($id_image_b64)) {
-            // إزالة أي header من نوع data:image/... إن وجد
-            if (str_starts_with($id_image_b64, 'data:')) {
-                $parts = explode(',', $id_image_b64, 2);
-                $id_image_b64 = $parts[1] ?? '';
-            }
-
-            // strict base64: يرجع false لو السلسلة غير صالحة
-            $id_image_bin = base64_decode($id_image_b64, true);
-            if ($id_image_bin === false) {
-                throw new Exception("Base64 غير صالح لصورة الهوية للراكب: " . $full_name);
-            }
-        }
+        $seat_id = $codeToId[$seat_code];
 
         $stmtPassenger->execute([
             ':booking_id'   => $booking_id,
@@ -198,13 +177,11 @@ try {
             ':gender'       => $gender,
             ':birth_date'   => $birth_date,
             ':phone_number' => $phone_number,
-            ':id_image'     => $id_image_bin, // يخزن في BYTEA
+            ':id_image'     => $id_image_b64, // نص Base64 مباشرة
         ]);
     }
 
-    /****************************************
-     * 6) تحديث حالة المقاعد إلى غير متاحة
-     ****************************************/
+    // 6) تحديث حالة المقاعد
     $inSeatIdsForUpdate = implode(',', array_fill(0, count($seatIds), '?'));
     $sqlUpdateSeats = "
         UPDATE seats
