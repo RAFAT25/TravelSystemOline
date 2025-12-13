@@ -6,11 +6,17 @@ function base64UrlEncode($data) {
 }
 
 function getFcmAccessTokenManual() {
-    // مسار ملف service-account.json
-    // إذا كان في نفس مجلد الملف:
-    $path ='/etc/secrets/service-account.json';
-    // إذا كانت المنصة تضعه في مسار آخر مثل /etc/secrets:
-    // $path = '/etc/secrets/service-account.json';
+    // على Render: secret file متاح في root و /etc/secrets
+    // نستخدم الجذر لأن سكربتاتك هناك
+    $path = __DIR__ . '/service-account.json';
+
+    if (!file_exists($path)) {
+        // احتياطاً، جرّب /etc/secrets
+        $altPath = '/etc/secrets/service-account.json';
+        if (file_exists($altPath)) {
+            $path = $altPath;
+        }
+    }
 
     if (!file_exists($path)) {
         throw new Exception('Service account file not found: ' . $path);
@@ -32,10 +38,10 @@ function getFcmAccessTokenManual() {
 
     $rawKey = $service['private_key'];
 
-    // جرّب تحميل المفتاح كما هو
+    // جرّب كما هو
     $privateKey = openssl_pkey_get_private($rawKey);
 
-    // لو فشل، جرّب تحويل \n النصية إلى أسطر فعلية
+    // لو فشل، جرّب استبدال \n
     if (!$privateKey) {
         $rawKeyFixed = str_replace('\\n', "\n", $rawKey);
         $privateKey  = openssl_pkey_get_private($rawKeyFixed);
@@ -47,13 +53,9 @@ function getFcmAccessTokenManual() {
 
     $clientEmail = $service['client_email'];
     $tokenUri    = $service['token_uri'];
+    $projectId   = $service['project_id'];
 
-    // يمكنك أخذ project_id من الملف مباشرة
-    $projectId = $service['project_id'];
-    // أو استخدام env إذا شئت:
-    // $projectId = getenv('FIREBASE_PROJECT_ID') ?: $service['project_id'];
-
-    // خزّنه في متغير بيئة عام إن أحببت استخدامه لاحقًا
+    // وضع project_id في env عشان نستعمله في دالة الإرسال
     putenv('FIREBASE_PROJECT_ID=' . $projectId);
 
     $now = time();
@@ -108,7 +110,6 @@ function getFcmAccessTokenManual() {
 }
 
 function sendFcmV1ToTokenManual($fcmToken, $title, $body, $data = []) {
-    // project_id من env أو من الملف (تم وضعه في env أعلاه)
     $projectId = getenv('FIREBASE_PROJECT_ID');
     if (!$projectId) {
         throw new Exception('FIREBASE_PROJECT_ID is empty');
