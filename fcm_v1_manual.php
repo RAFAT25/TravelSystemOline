@@ -6,7 +6,7 @@ function base64UrlEncode($data) {
 }
 
 function getFcmAccessTokenManual() {
-    // قراءة JSON من متغير البيئة على Render
+    // 1) قراءة JSON من متغير البيئة
     $serviceJson = getenv('FIREBASE_SERVICE_ACCOUNT_JSON');
     if (!$serviceJson) {
         throw new Exception('FIREBASE_SERVICE_ACCOUNT_JSON is empty');
@@ -21,12 +21,13 @@ function getFcmAccessTokenManual() {
         throw new Exception('private_key is missing in service account JSON');
     }
 
+    // 2) تجهيز المفتاح الخاص لصيغة تقرأها openssl
     $rawKey = $service['private_key'];
 
-    // جرّب كما هو
+    // جرّب كما هو (في حال Render أعطاه مع أسطر فعلية)
     $privateKey = openssl_pkey_get_private($rawKey);
 
-    // لو فشل، جرّب تحويل \n النصية إلى أسطر فعلية
+    // لو فشل، جرّب تحويل \n النصية إلى أسطر حقيقية
     if (!$privateKey) {
         $rawKeyFixed = str_replace('\\n', "\n", $rawKey);
         $privateKey  = openssl_pkey_get_private($rawKeyFixed);
@@ -40,9 +41,10 @@ function getFcmAccessTokenManual() {
     $tokenUri    = $service['token_uri'];
     $projectId   = $service['project_id'];
 
-    // نخزن project_id في env لاستخدامه في دالة الإرسال
+    // نخزن project_id في env لاستخدامه في الإرسال
     putenv('FIREBASE_PROJECT_ID=' . $projectId);
 
+    // 3) إنشاء JWT موقّع للحساب الخدمي
     $now = time();
     $exp = $now + 3600; // ساعة
 
@@ -67,7 +69,7 @@ function getFcmAccessTokenManual() {
 
     $jwt = $signatureInput . '.' . $base64Signature;
 
-    // طلب access token من Google
+    // 4) طلب access token من Google
     $postFields = http_build_query([
         'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         'assertion'  => $jwt,
@@ -93,8 +95,6 @@ function getFcmAccessTokenManual() {
     }
     return $json['access_token'];
 }
-$service = json_decode($serviceJson, true);
-
 
 function sendFcmV1ToTokenManual($fcmToken, $title, $body, $data = []) {
     $projectId = getenv('FIREBASE_PROJECT_ID');
