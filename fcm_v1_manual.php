@@ -8,7 +8,7 @@ function base64UrlEncode($data) {
 function getFcmAccessTokenManual() {
     // مسار ملف service-account.json
     // إذا كان في نفس مجلد الملف:
-    $path = __DIR__ . '/service-account.json';
+    $path ='/etc/secrets/service-account.json';
     // إذا كانت المنصة تضعه في مسار آخر مثل /etc/secrets:
     // $path = '/etc/secrets/service-account.json';
 
