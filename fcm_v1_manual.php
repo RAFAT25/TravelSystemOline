@@ -8,11 +8,11 @@ function base64UrlEncode($data) {
 function getFcmAccessTokenManual() {
     // على Render: secret file متاح في root و /etc/secrets
     // نستخدم الجذر لأن سكربتاتك هناك
-    $path = __DIR__ . '/service-account.json';
+     $path = '/etc/secrets/service-account.json';
 
     if (!file_exists($path)) {
         // احتياطاً، جرّب /etc/secrets
-        $altPath = '/etc/secrets/service-account.json';
+         $path = '/etc/secrets/service-account.json';
         if (file_exists($altPath)) {
             $path = $altPath;
         }
