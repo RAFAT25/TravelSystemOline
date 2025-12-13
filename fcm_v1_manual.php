@@ -6,27 +6,41 @@ function base64UrlEncode($data) {
 }
 
 function getFcmAccessTokenManual() {
-    // قراءة JSON من متغير البيئة
-    $serviceJson = getenv('FIREBASE_SERVICE_ACCOUNT_JSON');
-    if (!$serviceJson) {
-        throw new Exception('FIREBASE_SERVICE_ACCOUNT_JSON is empty');
+    // مسار ملف service-account.json
+    // إذا كان في نفس مجلد الملف:
+    $path = __DIR__ . '/service-account.json';
+    // إذا كانت المنصة تضعه في مسار آخر مثل /etc/secrets:
+    // $path = '/etc/secrets/service-account.json';
+
+    if (!file_exists($path)) {
+        throw new Exception('Service account file not found: ' . $path);
+    }
+
+    $serviceJson = file_get_contents($path);
+    if ($serviceJson === false) {
+        throw new Exception('Cannot read service account file');
     }
 
     $service = json_decode($serviceJson, true);
     if (!$service) {
-        throw new Exception('Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON');
+        throw new Exception('Invalid JSON in service account file');
     }
 
-    // معالجة الـ private_key
     if (empty($service['private_key'])) {
         throw new Exception('private_key is missing in service account JSON');
     }
 
     $rawKey = $service['private_key'];
-    // تحويل \n النصية إلى أسطر فعلية يفهمها openssl
-    $rawKey = str_replace('\\n', "\n", $rawKey);
 
+    // جرّب تحميل المفتاح كما هو
     $privateKey = openssl_pkey_get_private($rawKey);
+
+    // لو فشل، جرّب تحويل \n النصية إلى أسطر فعلية
+    if (!$privateKey) {
+        $rawKeyFixed = str_replace('\\n', "\n", $rawKey);
+        $privateKey  = openssl_pkey_get_private($rawKeyFixed);
+    }
+
     if (!$privateKey) {
         throw new Exception('Cannot load private key: ' . openssl_error_string());
     }
@@ -34,8 +48,16 @@ function getFcmAccessTokenManual() {
     $clientEmail = $service['client_email'];
     $tokenUri    = $service['token_uri'];
 
+    // يمكنك أخذ project_id من الملف مباشرة
+    $projectId = $service['project_id'];
+    // أو استخدام env إذا شئت:
+    // $projectId = getenv('FIREBASE_PROJECT_ID') ?: $service['project_id'];
+
+    // خزّنه في متغير بيئة عام إن أحببت استخدامه لاحقًا
+    putenv('FIREBASE_PROJECT_ID=' . $projectId);
+
     $now = time();
-    $exp = $now + 3600; // توكن صالح لمدة ساعة
+    $exp = $now + 3600;
 
     $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $claim  = [
@@ -86,6 +108,7 @@ function getFcmAccessTokenManual() {
 }
 
 function sendFcmV1ToTokenManual($fcmToken, $title, $body, $data = []) {
+    // project_id من env أو من الملف (تم وضعه في env أعلاه)
     $projectId = getenv('FIREBASE_PROJECT_ID');
     if (!$projectId) {
         throw new Exception('FIREBASE_PROJECT_ID is empty');
