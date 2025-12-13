@@ -6,30 +6,15 @@ function base64UrlEncode($data) {
 }
 
 function getFcmAccessTokenManual() {
-    // على Render: secret file متاح في root و /etc/secrets
-    // نستخدم الجذر لأن سكربتاتك هناك
-     $path = '/etc/secrets/service-account.json';
-
-    if (!file_exists($path)) {
-        // احتياطاً، جرّب /etc/secrets
-         $path = '/etc/secrets/service-account.json';
-        if (file_exists($altPath)) {
-            $path = $altPath;
-        }
-    }
-
-    if (!file_exists($path)) {
-        throw new Exception('Service account file not found: ' . $path);
-    }
-
-    $serviceJson = file_get_contents($path);
-    if ($serviceJson === false) {
-        throw new Exception('Cannot read service account file');
+    // قراءة JSON من متغير البيئة على Render
+    $serviceJson = getenv('FIREBASE_SERVICE_ACCOUNT_JSON');
+    if (!$serviceJson) {
+        throw new Exception('FIREBASE_SERVICE_ACCOUNT_JSON is empty');
     }
 
     $service = json_decode($serviceJson, true);
     if (!$service) {
-        throw new Exception('Invalid JSON in service account file');
+        throw new Exception('Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON');
     }
 
     if (empty($service['private_key'])) {
@@ -41,7 +26,7 @@ function getFcmAccessTokenManual() {
     // جرّب كما هو
     $privateKey = openssl_pkey_get_private($rawKey);
 
-    // لو فشل، جرّب استبدال \n
+    // لو فشل، جرّب تحويل \n النصية إلى أسطر فعلية
     if (!$privateKey) {
         $rawKeyFixed = str_replace('\\n', "\n", $rawKey);
         $privateKey  = openssl_pkey_get_private($rawKeyFixed);
@@ -55,11 +40,11 @@ function getFcmAccessTokenManual() {
     $tokenUri    = $service['token_uri'];
     $projectId   = $service['project_id'];
 
-    // وضع project_id في env عشان نستعمله في دالة الإرسال
+    // نخزن project_id في env لاستخدامه في دالة الإرسال
     putenv('FIREBASE_PROJECT_ID=' . $projectId);
 
     $now = time();
-    $exp = $now + 3600;
+    $exp = $now + 3600; // ساعة
 
     $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $claim  = [
