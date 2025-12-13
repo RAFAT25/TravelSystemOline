@@ -1,29 +1,41 @@
 <?php
+// fcm_v1_manual.php
 
 function base64UrlEncode($data) {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 }
 
 function getFcmAccessTokenManual() {
+    // قراءة JSON من متغير البيئة
     $serviceJson = getenv('FIREBASE_SERVICE_ACCOUNT_JSON');
     if (!$serviceJson) {
         throw new Exception('FIREBASE_SERVICE_ACCOUNT_JSON is empty');
     }
+
     $service = json_decode($serviceJson, true);
     if (!$service) {
         throw new Exception('Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON');
     }
 
-    $privateKey  = openssl_pkey_get_private($service['private_key']);
+    // معالجة الـ private_key
+    if (empty($service['private_key'])) {
+        throw new Exception('private_key is missing in service account JSON');
+    }
+
+    $rawKey = $service['private_key'];
+    // تحويل \n النصية إلى أسطر فعلية يفهمها openssl
+    $rawKey = str_replace('\\n', "\n", $rawKey);
+
+    $privateKey = openssl_pkey_get_private($rawKey);
     if (!$privateKey) {
-        throw new Exception('Cannot load private key');
+        throw new Exception('Cannot load private key: ' . openssl_error_string());
     }
 
     $clientEmail = $service['client_email'];
     $tokenUri    = $service['token_uri'];
 
     $now = time();
-    $exp = $now + 3600; // صالح لساعة
+    $exp = $now + 3600; // توكن صالح لمدة ساعة
 
     $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $claim  = [
@@ -40,13 +52,13 @@ function getFcmAccessTokenManual() {
 
     $signature = '';
     if (!openssl_sign($signatureInput, $signature, $privateKey, 'sha256')) {
-        throw new Exception('Failed to sign JWT');
+        throw new Exception('Failed to sign JWT: ' . openssl_error_string());
     }
     $base64Signature = base64UrlEncode($signature);
 
     $jwt = $signatureInput . '.' . $base64Signature;
 
-    // طلب access token
+    // طلب access token من Google
     $postFields = http_build_query([
         'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         'assertion'  => $jwt,
