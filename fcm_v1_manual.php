@@ -93,6 +93,8 @@ function getFcmAccessTokenManual() {
     }
     return $json['access_token'];
 }
+$service = json_decode($serviceJson, true);
+
 
 function sendFcmV1ToTokenManual($fcmToken, $title, $body, $data = []) {
     $projectId = getenv('FIREBASE_PROJECT_ID');
