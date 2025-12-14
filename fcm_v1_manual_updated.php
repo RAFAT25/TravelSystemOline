@@ -1,16 +1,16 @@
 <?php
 /**
- * fcm_v1_manual.php
+ * fcm_v1_manual_final.php
  * 
  * هذا الملف يوفر دالة لإرسال إشعارات Firebase Cloud Messaging (FCM)
  * باستخدام واجهة برمجة التطبيقات v1، مع المصادقة عبر حساب الخدمة (Service Account).
  * 
- * تم تطبيق حلول المشاكل المتعلقة بتحميل المفتاح الخاص (Private Key)
- * المخزن كمتغير بيئة JSON.
+ * تم تطبيق الحل الجذري النهائي لمشكلة تحميل المفتاح الخاص (Private Key)
+ * المخزن كمتغير بيئة JSON، عن طريق تنظيف المفتاح وإعادة بناء تنسيق PEM بشكل صارم.
  */
 
 // =============================================================================
-// 1. وظيفة تحميل بيانات الاعتماد (مع الحل لمشكلة فواصل الأسطر)
+// 1. وظيفة تحميل بيانات الاعتماد (مع الحل الجذري لمشكلة المفتاح الخاص)
 // =============================================================================
 
 /**
@@ -38,15 +38,21 @@ function getServiceAccountCredentials() {
         throw new Exception("المفتاح الخاص 'private_key' غير موجود في ملف JSON.");
     }
 
-    // الحل الأول: استبدال سلاسل \n النصية بفواصل أسطر حقيقية
-    // هذا يضمن أن OpenSSL يمكنه قراءة المفتاح بتنسيق PEM الصحيح
+    // الحل الجذري النهائي: تنظيف المفتاح الخاص بشكل صارم
     $privateKey = $service_account['private_key'];
-    // التأكد من أن المفتاح يبدأ وينتهي بفاصل سطر حقيقي
+    
+    // 1. استبدال أي تسلسل \n نصي بفاصل سطر حقيقي
     $privateKey = str_replace('\n', "\n", $privateKey);
-    // إضافة فاصل سطر في النهاية إذا لم يكن موجودًا لضمان صحة تنسيق PEM
-    if (substr($privateKey, -1) !== "\n") {
-        $privateKey .= "\n";
-    }
+    
+    // 2. إزالة جميع فواصل الأسطر الزائدة من المفتاح المشفر نفسه
+    // هذا يضمن أن المفتاح المشفر يكون على سطر واحد بين BEGIN و END
+    $privateKey = str_replace("\n", "", $privateKey);
+    
+    // 3. إعادة بناء المفتاح بتنسيق PEM الصارم لضمان قراءته بواسطة OpenSSL
+    // هذا يضمن أن BEGIN و END على أسطر منفصلة تمامًا
+    $privateKey = str_replace('-----BEGIN PRIVATE KEY-----', "-----BEGIN PRIVATE KEY-----\n", $privateKey);
+    $privateKey = str_replace('-----END PRIVATE KEY-----', "\n-----END PRIVATE KEY-----\n", $privateKey);
+    
     $service_account['private_key'] = $privateKey;
 
     return $service_account;
@@ -214,8 +220,8 @@ function sendFcmV1ToTokenManual($token, $title, $body, $data = []) {
 $testToken = 'd4B05-9oQVSAvz_GnRVtYy:APA91bEhYQZ63B85liQcEjDrX_1CJ1smi38BONdFnROJmjByW25pnOg00troDDPyOx4qZOcTvScr3jYC44mmaTOxj2TuehOFWR5HuxR8wqq27skorANZKIM';
 
 try {
-    $title = 'Test HTTP v1 (Fixed)';
-    $body  = 'This is a test message from PHP with the private key fix applied.';
+    $title = 'Test HTTP v1 (Final Fix)';
+    $body  = 'This is a test message from PHP with the final private key fix applied.';
 
     $res = sendFcmV1ToTokenManual(
         $testToken,
