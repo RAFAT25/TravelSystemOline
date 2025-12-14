@@ -1,13 +1,12 @@
 <?php
 /**
- * fcm_v1_manual_updated.php
+ * fcm_v1_manual.php
  * 
  * هذا الملف يوفر دالة لإرسال إشعارات Firebase Cloud Messaging (FCM)
  * باستخدام واجهة برمجة التطبيقات v1، مع المصادقة عبر حساب الخدمة (Service Account).
  * 
- * تم تطبيق حلول المشكلتين:
- * 1. معالجة فواصل الأسطر في المفتاح الخاص (Private Key) المخزن كمتغير بيئة JSON.
- * 2. تحويل المفتاح الخاص إلى مورد OpenSSL (Resource) قبل استخدامه في openssl_sign().
+ * تم تطبيق حلول المشاكل المتعلقة بتحميل المفتاح الخاص (Private Key)
+ * المخزن كمتغير بيئة JSON.
  */
 
 // =============================================================================
@@ -40,8 +39,15 @@ function getServiceAccountCredentials() {
     }
 
     // الحل الأول: استبدال سلاسل \n النصية بفواصل أسطر حقيقية
+    // هذا يضمن أن OpenSSL يمكنه قراءة المفتاح بتنسيق PEM الصحيح
     $privateKey = $service_account['private_key'];
-    $service_account['private_key'] = str_replace('\n', "\n", $privateKey);
+    // التأكد من أن المفتاح يبدأ وينتهي بفاصل سطر حقيقي
+    $privateKey = str_replace('\n', "\n", $privateKey);
+    // إضافة فاصل سطر في النهاية إذا لم يكن موجودًا لضمان صحة تنسيق PEM
+    if (substr($privateKey, -1) !== "\n") {
+        $privateKey .= "\n";
+    }
+    $service_account['private_key'] = $privateKey;
 
     return $service_account;
 }
@@ -60,15 +66,16 @@ function getAccessToken() {
     $credentials = getServiceAccountCredentials();
     
     $client_email = $credentials['client_email'];
-    $private_key_pem  = $credentials['private_key']; // المفتاح الخاص كسلسلة نصية (PEM String)
+    $private_key_pem  = $credentials['private_key'];
     $token_uri    = $credentials['token_uri'];
     
-    // الخطوة الحاسمة الثانية: تحميل المفتاح الخاص كـ OpenSSL resource
+    // الحل الثاني: تحميل المفتاح الخاص كـ OpenSSL resource
     $private_key_resource = openssl_pkey_get_private($private_key_pem);
 
     if ($private_key_resource === false) {
-        // إذا فشل التحميل، فهذا يعني أن تنسيق PEM لا يزال غير صحيح (رغم معالجة فواصل الأسطر)
-        throw new Exception("فشل تحميل المفتاح الخاص كـ OpenSSL resource. تأكد من أن المفتاح بتنسيق PEM صحيح.");
+        // تشخيص خطأ OpenSSL التفصيلي
+        $error_message = openssl_error_string();
+        throw new Exception("فشل تحميل المفتاح الخاص كـ OpenSSL resource. تأكد من أن المفتاح بتنسيق PEM صحيح. خطأ OpenSSL: " . $error_message);
     }
     
     $now = time();
