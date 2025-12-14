@@ -5,15 +5,13 @@
  * هذا الملف يوفر دالة لإرسال إشعارات Firebase Cloud Messaging (FCM)
  * باستخدام واجهة برمجة التطبيقات v1، مع المصادقة عبر حساب الخدمة (Service Account).
  * 
- * تم تطبيق الحل النهائي لمشكلة تحميل المفتاح الخاص (Private Key)
- * المخزن كمتغير بيئة JSON، عن طريق استبدال سلاسل \n النصية بفواصل أسطر حقيقية.
- * 
- * ملاحظة: لتبسيط الكود، تم استخدام دوال PHP الأساسية لإنشاء JWT،
- * ولكن يفضل استخدام مكتبة JWT موثوقة في بيئة الإنتاج.
+ * تم تطبيق حلول المشكلتين:
+ * 1. معالجة فواصل الأسطر في المفتاح الخاص (Private Key) المخزن كمتغير بيئة JSON.
+ * 2. تحويل المفتاح الخاص إلى مورد OpenSSL (Resource) قبل استخدامه في openssl_sign().
  */
 
 // =============================================================================
-// 1. وظيفة تحميل بيانات الاعتماد (مع الحل لمشكلة المفتاح الخاص)
+// 1. وظيفة تحميل بيانات الاعتماد (مع الحل لمشكلة فواصل الأسطر)
 // =============================================================================
 
 /**
@@ -41,8 +39,7 @@ function getServiceAccountCredentials() {
         throw new Exception("المفتاح الخاص 'private_key' غير موجود في ملف JSON.");
     }
 
-    // الحل النهائي: استبدال سلاسل \n النصية بفواصل أسطر حقيقية
-    // هذا يضمن أن OpenSSL يمكنه قراءة المفتاح بتنسيق PEM الصحيح
+    // الحل الأول: استبدال سلاسل \n النصية بفواصل أسطر حقيقية
     $privateKey = $service_account['private_key'];
     $service_account['private_key'] = str_replace('\n', "\n", $privateKey);
 
@@ -63,8 +60,16 @@ function getAccessToken() {
     $credentials = getServiceAccountCredentials();
     
     $client_email = $credentials['client_email'];
-    $private_key  = $credentials['private_key'];
+    $private_key_pem  = $credentials['private_key']; // المفتاح الخاص كسلسلة نصية (PEM String)
     $token_uri    = $credentials['token_uri'];
+    
+    // الخطوة الحاسمة الثانية: تحميل المفتاح الخاص كـ OpenSSL resource
+    $private_key_resource = openssl_pkey_get_private($private_key_pem);
+
+    if ($private_key_resource === false) {
+        // إذا فشل التحميل، فهذا يعني أن تنسيق PEM لا يزال غير صحيح (رغم معالجة فواصل الأسطر)
+        throw new Exception("فشل تحميل المفتاح الخاص كـ OpenSSL resource. تأكد من أن المفتاح بتنسيق PEM صحيح.");
+    }
     
     $now = time();
     $expires = $now + 3600; // ينتهي الرمز بعد ساعة واحدة (3600 ثانية)
@@ -91,12 +96,14 @@ function getAccessToken() {
     
     $signature_input = $base64UrlHeader . "." . $base64UrlPayload;
 
-    // 4. توقيع رمز JWT باستخدام المفتاح الخاص المعالج
+    // 4. توقيع رمز JWT باستخدام مورد المفتاح الخاص
     $signature = '';
-    // هنا يتم استخدام المفتاح الخاص المعالج الذي يحتوي على فواصل أسطر حقيقية
-    if (!openssl_sign($signature_input, $signature, $private_key, 'sha256')) {
+    if (!openssl_sign($signature_input, $signature, $private_key_resource, 'sha256')) {
         throw new Exception("فشل توقيع JWT باستخدام المفتاح الخاص.");
     }
+
+    // تحرير مورد المفتاح بعد استخدامه
+    openssl_free_key($private_key_resource);
     
     $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
 
@@ -147,8 +154,7 @@ function getAccessToken() {
  */
 function sendFcmV1ToTokenManual($token, $title, $body, $data = []) {
     $credentials = getServiceAccountCredentials();
-    // يجب أن يكون project_id موجودًا في JSON حساب الخدمة
-    $project_id = $credentials['project_id']; 
+    $project_id = $credentials['project_id'];
     $access_token = getAccessToken();
 
     $url = "https://fcm.googleapis.com/v1/projects/{$project_id}/messages:send";
