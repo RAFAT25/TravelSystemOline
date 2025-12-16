@@ -49,6 +49,8 @@ class FcmService {
             $keyStart = substr($data['private_key'], 0, 30);
             error_log("FCM DEBUG: Key starts with: " . $keyStart);
             error_log("FCM DEBUG: OpenSSL Key Valid? " . ($isValidKey ? 'YES' : 'NO - INVALID FORMAT'));
+            error_log("FCM DEBUG: Project ID: " . ($data['project_id'] ?? 'MISSING'));
+            error_log("FCM DEBUG: Client Email: " . ($data['client_email'] ?? 'MISSING'));
             
             $factory = $factory->withServiceAccount($data);
         } elseif (is_readable($renderSecretPath)) {
