@@ -27,11 +27,17 @@ class FcmService {
             }
             $factory = $factory->withServiceAccount($credentialsPath);
         } elseif ($jsonCredentials) {
-            // Method 2: JSON String directly in Env Var (Easier for some)
+            // Method 2: JSON String directly in Env Var
             $data = json_decode($jsonCredentials, true);
             if (!$data) {
                 throw new Exception("FIREBASE_CREDENTIALS env var contains invalid JSON.");
             }
+            
+            // FIX: Handle newlines in private_key if they got escaped during copy-paste
+            if (isset($data['private_key'])) {
+                $data['private_key'] = str_replace('\\n', "\n", $data['private_key']);
+            }
+
             $factory = $factory->withServiceAccount($data);
         } elseif (file_exists($localPath)) {
             // Method 3: Local file
