@@ -11,9 +11,10 @@ class FcmService {
     private $messaging;
 
     public function __construct() {
-        // Option 1: Env var points to file path (Best for Render "Secret Files")
         // Option 2: Env var contains JSON content directly (FIREBASE_CREDENTIALS_JSON)
         
+        $factory = (new Factory());
+
         $credentialsPath = getenv('GOOGLE_APPLICATION_CREDENTIALS');
         $jsonCredentials = getenv('FIREBASE_CREDENTIALS');
         $renderSecretPath = '/etc/secrets/firebase_key.json'; // Default Render path
