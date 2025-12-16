@@ -26,11 +26,8 @@ class FcmService {
                  throw new Exception("Env var GOOGLE_APPLICATION_CREDENTIALS points to '$credentialsPath', but file missing.");
             }
             $factory = $factory->withServiceAccount($credentialsPath);
-        } elseif (file_exists($renderSecretPath)) {
-            // Method 2: Render Secret File (Standard)
-            $factory = $factory->withServiceAccount($renderSecretPath);
         } elseif ($jsonCredentials) {
-            // Method 3: JSON String in Env Var
+            // Method 2: JSON String in Env Var (High Priority & No Permission Issues)
             $data = json_decode($jsonCredentials, true);
             if (!$data) {
                 throw new Exception("FIREBASE_CREDENTIALS env var contains invalid JSON.");
@@ -40,11 +37,17 @@ class FcmService {
                 $data['private_key'] = str_replace('\\n', "\n", $data['private_key']);
             }
             $factory = $factory->withServiceAccount($data);
+        } elseif (is_readable($renderSecretPath)) {
+            // Method 3: Render Secret File (Standard)
+            $factory = $factory->withServiceAccount($renderSecretPath);
+        } elseif (file_exists($renderSecretPath)) {
+            // File exists but not readable
+            throw new Exception("Found '$renderSecretPath' but cannot read it (Permission Denied). Please use FIREBASE_CREDENTIALS env var instead.");
         } elseif (file_exists($localPath)) {
             // Method 4: Local file (Dev)
             $factory = $factory->withServiceAccount($localPath);
         } else {
-             throw new Exception("No credentials found! Add 'firebase_key.json' to Render Secret Files.");
+             throw new Exception("No credentials found! Set FIREBASE_CREDENTIALS env var.");
         }
 
         $this->messaging = $factory->createMessaging();
