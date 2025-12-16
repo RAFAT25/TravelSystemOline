@@ -40,9 +40,6 @@ class FcmService {
         } elseif (is_readable($renderSecretPath)) {
             // Method 3: Render Secret File (Standard)
             $factory = $factory->withServiceAccount($renderSecretPath);
-        } elseif (file_exists($renderSecretPath)) {
-            // File exists but not readable
-            throw new Exception("Found '$renderSecretPath' but cannot read it (Permission Denied). Please use FIREBASE_CREDENTIALS env var instead.");
         } elseif (file_exists($localPath)) {
             // Method 4: Local file (Dev)
             $factory = $factory->withServiceAccount($localPath);
