@@ -1,1 +1,6 @@
 .env
+vendor/
+*.json
+!composer.json
+!package.json
+public/uploads/
