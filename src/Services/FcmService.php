@@ -37,14 +37,18 @@ class FcmService {
             if (!$data) {
                 throw new Exception("FIREBASE_CREDENTIA env var contains invalid JSON.");
             }
-            // Sanitize private key: Handle literal \n, \r\n, and escaped \\n
+            // Sanitize private key: Aggressive Regex for \n, \\n, \\\n, etc.
             if (isset($data['private_key'])) {
-                $data['private_key'] = str_replace(['\\n', '\\r\\n'], "\n", $data['private_key']);
+                $data['private_key'] = preg_replace('/\\\\+n/', "\n", $data['private_key']);
             }
             
-            // DEBUG: Log key format (masked)
+            // Verify key validity immediately
+            $isValidKey = openssl_pkey_get_private($data['private_key']);
+            
+            // DEBUG: Log key format and validation result
             $keyStart = substr($data['private_key'], 0, 30);
-            error_log("FCM DEBUG: Key starts with: " . $keyStart . " (Includes newline? " . (strpos($data['private_key'], "\n") !== false ? 'YES' : 'NO') . ")");
+            error_log("FCM DEBUG: Key starts with: " . $keyStart);
+            error_log("FCM DEBUG: OpenSSL Key Valid? " . ($isValidKey ? 'YES' : 'NO - INVALID FORMAT'));
             
             $factory = $factory->withServiceAccount($data);
         } elseif (is_readable($renderSecretPath)) {
