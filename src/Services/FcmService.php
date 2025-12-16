@@ -15,10 +15,15 @@ class FcmService {
         
         $factory = (new Factory());
 
-        $credentialsPath = getenv('GOOGLE_APPLICATION_CREDENTIALS');
-        $jsonCredentials = getenv('FIREBASE_CREDENTIALS');
-        $renderSecretPath = '/etc/secrets/firebase_key.json'; // Default Render path
+        $credentialsPath = getenv('GOOGLE_APPLICATION_CREDENTIALS') ?: ($_ENV['GOOGLE_APPLICATION_CREDENTIALS'] ?? null);
+        $jsonCredentials = getenv('FIREBASE_CREDENTIALS') ?: ($_ENV['FIREBASE_CREDENTIALS'] ?? null);
+        $renderSecretPath = '/etc/secrets/firebase_key.json'; 
         $localPath = __DIR__ . '/../../secrets/firebase_key.json';
+
+        // DEBUG: Output to Render Logs
+        error_log("FCM DEBUG: FIREBASE_CREDENTIALS length: " . strlen((string)$jsonCredentials));
+        error_log("FCM DEBUG: GOOGLE_APPLICATION_CREDENTIALS: " . $credentialsPath);
+        error_log("FCM DEBUG: Render Secret Path readable? " . (is_readable($renderSecretPath) ? 'YES' : 'NO'));
 
         if ($credentialsPath) {
             // Method 1: Explicit Env Var Path
