@@ -37,10 +37,15 @@ class FcmService {
             if (!$data) {
                 throw new Exception("FIREBASE_CREDENTIA env var contains invalid JSON.");
             }
-            // Sanitize private key
+            // Sanitize private key: Handle literal \n, \r\n, and escaped \\n
             if (isset($data['private_key'])) {
-                $data['private_key'] = str_replace('\\n', "\n", $data['private_key']);
+                $data['private_key'] = str_replace(['\\n', '\\r\\n'], "\n", $data['private_key']);
             }
+            
+            // DEBUG: Log key format (masked)
+            $keyStart = substr($data['private_key'], 0, 30);
+            error_log("FCM DEBUG: Key starts with: " . $keyStart . " (Includes newline? " . (strpos($data['private_key'], "\n") !== false ? 'YES' : 'NO') . ")");
+            
             $factory = $factory->withServiceAccount($data);
         } elseif (is_readable($renderSecretPath)) {
             // Method 3: Render Secret File (Standard)
