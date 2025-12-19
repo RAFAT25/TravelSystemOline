@@ -1,12 +1,28 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/vendor/autoload.php';
 require_once 'connect.php';
+
+use Travel\Middleware\AuthMiddleware;
+use Travel\Helpers\Response;
+use Dotenv\Dotenv;
+
+// تحميل متغيرات البيئة
+if (file_exists(__DIR__ . '/.env')) {
+    $dotenv = Dotenv::createImmutable(__DIR__);
+    $dotenv->load();
+}
+
+// التحقق من JWT Token
+$middleware = new AuthMiddleware();
+$authenticatedUser = $middleware->validateToken();
 
 try {
     $input = file_get_contents('php://input');
     $data  = json_decode($input, true);
 
-    $user_id        = isset($data['user_id'])        ? (int)$data['user_id']        : 0;
+    // استخدام user_id من التوكن بدلاً من الإدخال
+    $user_id        = $authenticatedUser['user_id'];
     $trip_id        = isset($data['trip_id'])        ? (int)$data['trip_id']        : 0;
     $total_price    = isset($data['total_price'])    ? (float)$data['total_price']  : 0;
     $payment_method = isset($data['payment_method']) ? trim($data['payment_method']) : 'Cash';

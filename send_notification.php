@@ -1,179 +1,82 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/vendor/autoload.php';
+require_once 'connect.php';
 
-require 'connect.php'; // يحتوي على $con (PDO PostgreSQL/MySQL)
+use Travel\Middleware\AuthMiddleware;
+use Travel\Services\FcmService;
+use Travel\Helpers\Response;
+use Dotenv\Dotenv;
 
-// إعدادات Firebase
-$serviceAccountPath = __DIR__ . '/config/unified-adviser-408114-firebase-adminsdk-hcjoe-dea9fa958b.json';
+// تحميل متغيرات البيئة
+if (file_exists(__DIR__ . '/.env')) {
+    $dotenv = Dotenv::createImmutable(__DIR__);
+    $dotenv->load();
+}
 
-$projectId = 'unified-adviser-408114'; // Project ID من Firebase Console
+// التحقق من JWT Token
+$middleware = new AuthMiddleware();
+$authenticatedUser = $middleware->validateToken();
 
-// 0) قراءة JSON من جسم الطلب
+// قراءة البيانات
 $input = file_get_contents('php://input');
 $data  = json_decode($input, true);
 
-$user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
-$title   = isset($data['title'])   ? trim($data['title'])   : 'Test title';
-$body    = isset($data['body'])    ? trim($data['body'])    : 'Test body';
+$target_user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+$title = isset($data['title']) ? trim($data['title']) : '';
+$body  = isset($data['body']) ? trim($data['body']) : '';
+$extra_data = isset($data['data']) && is_array($data['data']) ? $data['data'] : [];
 
-if ($user_id <= 0) {
-    http_response_code(400);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'Missing user_id'
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+// التحقق من البيانات
+if ($target_user_id <= 0) {
+    Response::error('user_id مطلوب', 400);
 }
 
-// 1) جلب آخر token للمستخدم
-$stmt = $con->prepare("
-    SELECT fcm_token
-    FROM user_device_tokens
-    WHERE user_id = :uid
-    ORDER BY updated_at DESC, id DESC
-    LIMIT 1
-");
-$stmt->execute([':uid' => $user_id]);
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$row || empty($row['fcm_token'])) {
-    http_response_code(404);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'No token for this user'
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+if (empty($title) || empty($body)) {
+    Response::error('title و body مطلوبان', 400);
 }
 
-$targetToken = $row['fcm_token'];
-
-// 2) دالة للحصول على access_token من service account (JWT → OAuth2)
-function getAccessToken($serviceAccountPath)
-{
-    if (!file_exists($serviceAccountPath)) {
-        throw new Exception('Service account file not found at: ' . $serviceAccountPath);
-    }
-
-    $json = file_get_contents($serviceAccountPath);
-    if ($json === false) {
-        throw new Exception('Cannot read service account file');
-    }
-
-    $jsonKey = json_decode($json, true);
-    if (!is_array($jsonKey) || empty($jsonKey['private_key']) || empty($jsonKey['client_email'])) {
-        throw new Exception('Invalid service account JSON');
-    }
-
-    $now         = time();
-    $expires     = $now + 3600; // صلاحية ساعة
-    $privateKey  = $jsonKey['private_key'];
-    $clientEmail = $jsonKey['client_email'];
-
-    $header = ['alg' => 'RS256', 'typ' => 'JWT'];
-    $payload = [
-        'iss'   => $clientEmail,
-        'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
-        'aud'   => 'https://oauth2.googleapis.com/token',
-        'iat'   => $now,
-        'exp'   => $expires,
-    ];
-
-    $base64UrlHeader  = rtrim(strtr(base64_encode(json_encode($header)), '+/', '-_'), '=');
-    $base64UrlPayload = rtrim(strtr(base64_encode(json_encode($payload)), '+/', '-_'), '=');
-    $signatureInput   = $base64UrlHeader . '.' . $base64UrlPayload;
-
-    if (!openssl_sign($signatureInput, $signature, $privateKey, 'sha256WithRSAEncryption')) {
-        throw new Exception('openssl_sign failed – check OpenSSL extension and private key format');
-    }
-
-    $base64UrlSignature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
-    $jwt = $base64UrlHeader . '.' . $base64UrlPayload . '.' . $base64UrlSignature;
-
-    // طلب access_token من Google
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, 'https://oauth2.googleapis.com/token');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        'assertion'  => $jwt,
-    ]));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-    $result = curl_exec($ch);
-    if ($result === false) {
-        $err = curl_error($ch);
-        curl_close($ch);
-        throw new Exception('cURL error (token request): ' . $err);
-    }
-
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $data = json_decode($result, true);
-    if ($httpCode !== 200 || !isset($data['access_token'])) {
-        throw new Exception('Unable to get access_token. HTTP ' . $httpCode . ' Response: ' . $result);
-    }
-
-    return $data['access_token'];
-}
-
-// 2.1) الحصول على access_token
 try {
-    $accessToken = getAccessToken($serviceAccountPath);
-} catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => $e->getMessage()
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+    // 1) جلب آخر token للمستخدم المستهدف
+    $stmt = $con->prepare("
+        SELECT fcm_token
+        FROM user_device_tokens
+        WHERE user_id = :uid
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':uid' => $target_user_id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// 3) بناء رسالة FCM HTTP v1
-$message = [
-    'message' => [
-        'token' => $targetToken,
-        'notification' => [
+    if (!$row || empty($row['fcm_token'])) {
+        Response::error('لا يوجد توكن لهذا المستخدم', 404);
+    }
+
+    $targetToken = $row['fcm_token'];
+
+    // 2) إرسال الإشعار باستخدام FcmService
+    $fcmService = new FcmService();
+    
+    // إضافة بيانات إضافية
+    $notificationData = array_merge([
+        'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+        'sender_id' => (string)$authenticatedUser['user_id'],
+    ], $extra_data);
+
+    $result = $fcmService->sendNotification($targetToken, $title, $body, $notificationData);
+
+    if ($result['success']) {
+        Response::success([
+            'target_user_id' => $target_user_id,
             'title' => $title,
-            'body'  => $body,
-        ],
-        'data' => [
-            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-        ],
-    ],
-];
+            'body' => $body
+        ], 'تم إرسال الإشعار بنجاح');
+    } else {
+        Response::error('فشل إرسال الإشعار: ' . ($result['error'] ?? 'خطأ غير معروف'), 500);
+    }
 
-$url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
-
-// 4) إرسال الطلب إلى FCM
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Authorization: Bearer ' . $accessToken,
-    'Content-Type: application/json; charset=utf-8',
-]);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($message));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-$result = curl_exec($ch);
-if ($result === false) {
-    $err = curl_error($ch);
-    curl_close($ch);
-    http_response_code(500);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'cURL error (send): ' . $err
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+} catch (Exception $e) {
+    error_log("Send Notification Error: " . $e->getMessage());
+    Response::error('خطأ في إرسال الإشعار', 500);
 }
 
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-echo json_encode([
-    'status'   => $httpCode === 200 ? 'ok' : 'error',
-    'httpCode' => $httpCode,
-    'raw'      => $result,                 // الرد الخام من FCM ليسهل الـ debug
-    'response' => json_decode($result, true),
-], JSON_UNESCAPED_UNICODE);

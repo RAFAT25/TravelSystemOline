@@ -1,7 +1,38 @@
+# Environment files
 .env
+.env.local
+.env.production
+
+# Dependencies
 vendor/
+node_modules/
+
+# JSON files (except specific ones)
 *.json
 !composer.json
 !composer.lock
 !package.json
+
+# Uploads
 public/uploads/
+
+# Sensitive files - DO NOT COMMIT
+db.php
+secrets/
+config/firebase*.json
+config/*firebase*.json
+config/*-adminsdk-*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,6 +1,21 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
-include "connect.php"; // PDO PostgreSQL في $con
+require_once __DIR__ . '/vendor/autoload.php';
+require_once 'connect.php';
+
+use Travel\Middleware\AuthMiddleware;
+use Travel\Helpers\Response;
+use Dotenv\Dotenv;
+
+// تحميل متغيرات البيئة
+if (file_exists(__DIR__ . '/.env')) {
+    $dotenv = Dotenv::createImmutable(__DIR__);
+    $dotenv->load();
+}
+
+// التحقق من JWT Token
+$middleware = new AuthMiddleware();
+$authenticatedUser = $middleware->validateToken();
 
 try {
     $input = file_get_contents('php://input');

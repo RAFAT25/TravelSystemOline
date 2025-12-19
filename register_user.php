@@ -1,7 +1,9 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Only enable debug mode in development
+$isDev = getenv('APP_ENV') === 'development';
+ini_set('display_errors', $isDev ? 1 : 0);
+ini_set('display_startup_errors', $isDev ? 1 : 0);
+error_reporting($isDev ? E_ALL : 0);
 header("Content-Type: application/json; charset=UTF-8");
 
 include "connect.php";

@@ -1,24 +1,44 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/vendor/autoload.php';
+require_once 'connect.php';
 
-require 'connect.php'; // الملف الذي فيه $con (اتصال PDO)
+use Travel\Middleware\AuthMiddleware;
+use Travel\Helpers\Response;
+use Travel\Helpers\Validator;
+use Dotenv\Dotenv;
 
-// قراءة البيانات من POST
-$user_id   = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
-$fcm_token = $_POST['fcm_token'] ?? '';
-$device    = $_POST['device_type'] ?? 'android';
+// تحميل متغيرات البيئة
+if (file_exists(__DIR__ . '/.env')) {
+    $dotenv = Dotenv::createImmutable(__DIR__);
+    $dotenv->load();
+}
 
-if ($user_id <= 0 || $fcm_token === '') {
-    http_response_code(400);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'Missing user_id or fcm_token',
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+// التحقق من JWT Token
+$middleware = new AuthMiddleware();
+$authenticatedUser = $middleware->validateToken();
+
+// قراءة البيانات من JSON
+$input = file_get_contents('php://input');
+$data = json_decode($input, true);
+
+$user_id   = $authenticatedUser['user_id']; // من التوكن
+$fcm_token = isset($data['fcm_token']) ? trim($data['fcm_token']) : '';
+$device    = isset($data['device_type']) ? trim($data['device_type']) : 'android';
+
+// التحقق من البيانات
+if (empty($fcm_token)) {
+    Response::error('fcm_token مطلوب', 400);
+}
+
+// التحقق من نوع الجهاز
+$allowedDevices = ['android', 'ios', 'web'];
+if (!in_array($device, $allowedDevices)) {
+    $device = 'android'; // القيمة الافتراضية
 }
 
 try {
-    // حذف أي token قديم لنفس المستخدم + نفس الجهاز (اختياري)
+    // حذف أي token قديم لنفس المستخدم + نفس الجهاز
     $stmt = $con->prepare("
         DELETE FROM user_device_tokens
         WHERE user_id = :uid AND device_type = :dev
@@ -30,8 +50,8 @@ try {
 
     // إدخال token الجديد
     $stmt = $con->prepare("
-        INSERT INTO user_device_tokens (user_id, fcm_token, device_type)
-        VALUES (:uid, :token, :dev)
+        INSERT INTO user_device_tokens (user_id, fcm_token, device_type, created_at)
+        VALUES (:uid, :token, :dev, CURRENT_TIMESTAMP)
     ");
     $stmt->execute([
         ':uid'   => $user_id,
@@ -39,14 +59,13 @@ try {
         ':dev'   => $device,
     ]);
 
-    echo json_encode([
-        'status'  => 'ok',
-        'message' => 'Token saved',
-    ], JSON_UNESCAPED_UNICODE);
+    Response::success([
+        'user_id' => $user_id,
+        'device_type' => $device
+    ], 'تم حفظ التوكن بنجاح');
+
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode([
-        'status'  => 'error',
-        'message' => 'DB error: ' . $e->getMessage(),
-    ], JSON_UNESCAPED_UNICODE);
+    error_log("FCM Token Save Error: " . $e->getMessage());
+    Response::error('خطأ في حفظ التوكن', 500);
 }
+

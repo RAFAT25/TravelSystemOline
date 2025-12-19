@@ -10,8 +10,17 @@ class AuthMiddleware {
     private $secret_key;
 
     public function __construct() {
-        // Use a secure key from env or default for dev (warn usage)
-        $this->secret_key = getenv('JWT_SECRET') ?: 'default_secret_key_CHANGE_ME';
+        // JWT Secret - يجب تعيينه في Production
+        $this->secret_key = getenv('JWT_SECRET');
+        
+        if (empty($this->secret_key)) {
+            // في بيئة التطوير فقط
+            if (getenv('APP_ENV') === 'development') {
+                $this->secret_key = 'dev_secret_key_for_local_testing_only_32chars!';
+            } else {
+                throw new \Exception('JWT_SECRET environment variable is required in production');
+            }
+        }
     }
 
     public function validateToken() {
