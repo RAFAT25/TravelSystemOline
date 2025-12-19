@@ -2,5 +2,6 @@
 vendor/
 *.json
 !composer.json
+!composer.lock
 !package.json
 public/uploads/
