@@ -132,6 +132,7 @@ class BookingController {
                 "success" => false,
                 "error" => $e->getMessage()
             ], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     public function updatePayment() {
