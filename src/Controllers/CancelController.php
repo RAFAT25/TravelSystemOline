@@ -111,7 +111,7 @@ class CancelController {
                 "total_price" => $total_price,
                 "hours_before_departure" => $hours_before_departure,
                 "rule" => [
-                    "cancel_policy_rule_id" => (int)$rule['cancel_policy_rule_id'],
+                    "cancel_policy_rule_id" => (int)($rule['cancel_policy_rule_id'] ?? $rule['id'] ?? 0),
                     "min_hours_before_departure" => (float)$rule['min_hours_before_departure'],
                     "max_hours_before_departure" => $rule['max_hours_before_departure'],
                     "refund_percentage"          => $refund_percentage,
@@ -260,7 +260,7 @@ class CancelController {
             $stmtInsertCancel->execute([
                 ':bid'       => $booking_id,
                 ':cpid'      => $cancel_policy_id,
-                ':rule_id'   => (int)$rule['cancel_policy_rule_id'],
+                ':rule_id'   => (int)($rule['cancel_policy_rule_id'] ?? $rule['id'] ?? 0),
                 ':refund_pct'=> $refund_percentage,
                 ':fee'       => $cancellation_fee,
                 ':refund_amt'=> $refund_amount,
