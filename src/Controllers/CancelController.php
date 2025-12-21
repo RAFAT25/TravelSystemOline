@@ -36,6 +36,7 @@ class CancelController {
                     b.booking_id,
                     b.total_price,
                     b.booking_status,
+                    b.payment_status,
                     b.cancel_policy_id,
                     t.departure_time,
                     t.trip_id
@@ -63,45 +64,64 @@ class CancelController {
             $total_price      = (float)$booking['total_price'];
             $departure_time   = $booking['departure_time'];
 
-            // 2) حساب الساعات المتبقية قبل الانطلاق
-            $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-            $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-            $diff = $dep->getTimestamp() - $now->getTimestamp();
-            $hours_before_departure = $diff / 3600.0;
+            $payment_status = $booking['payment_status'] ?? 'Unpaid';
 
-            // 3) اختيار الـ rule المناسبة
-            $sqlRule = "
-                SELECT *
-                FROM cancel_policy_rules
-                WHERE cancel_policy_id = :cpid
-                  AND is_active = TRUE
-                  AND min_hours_before_departure <= :hours::NUMERIC
-                  AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
-                ORDER BY min_hours_before_departure DESC
-                LIMIT 1
-            ";
-            $stmtRule = $this->conn->prepare($sqlRule);
-            $stmtRule->execute([
-                ':cpid'  => $cancel_policy_id,
-                ':hours' => $hours_before_departure
-            ]);
-            $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
+            // 1) لو الحجز غير مدفوع
+            if ($payment_status === 'Unpaid') {
+                $refund_amount     = 0;
+                $refund_percentage = 0;
+                $cancellation_fee  = 0;
+                $rule = []; // No rule applied
+                
+                // For Preview purposes to calculate hours anyway
+                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
+                $diff = $dep->getTimestamp() - $now->getTimestamp();
+                $hours_before_departure = $diff / 3600.0;
 
-            if (!$rule) {
-                echo json_encode([
-                    "success" => false,
-                    "error"   => "No matching cancel rule for this time window",
-                    "hours_before_departure" => $hours_before_departure
-                ], JSON_UNESCAPED_UNICODE);
-                return;
-            }
-
-            $refund_percentage = (float)$rule['refund_percentage'];
-            $cancellation_fee  = (float)$rule['cancellation_fee'];
-
-            $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
-            if ($refund_amount < 0) {
-                $refund_amount = 0;
+            } else {
+                // 2) لو الحجز مدفوع -> نطبق قواعد السياسة
+                
+                // حساب الساعات المتبقية قبل الانطلاق
+                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
+                $diff = $dep->getTimestamp() - $now->getTimestamp();
+                $hours_before_departure = $diff / 3600.0;
+    
+                // 3) اختيار الـ rule المناسبة
+                $sqlRule = "
+                    SELECT *
+                    FROM cancel_policy_rules
+                    WHERE cancel_policy_id = :cpid
+                      AND is_active = TRUE
+                      AND min_hours_before_departure <= :hours::NUMERIC
+                      AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
+                    ORDER BY min_hours_before_departure DESC
+                    LIMIT 1
+                ";
+                $stmtRule = $this->conn->prepare($sqlRule);
+                $stmtRule->execute([
+                    ':cpid'  => $cancel_policy_id,
+                    ':hours' => $hours_before_departure
+                ]);
+                $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
+    
+                if (!$rule) {
+                    echo json_encode([
+                        "success" => false,
+                        "error"   => "No matching cancel rule for this time window",
+                        "hours_before_departure" => $hours_before_departure
+                    ], JSON_UNESCAPED_UNICODE);
+                    return;
+                }
+    
+                $refund_percentage = (float)$rule['refund_percentage'];
+                $cancellation_fee  = (float)$rule['cancellation_fee'];
+    
+                $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
+                if ($refund_amount < 0) {
+                    $refund_amount = 0;
+                }
             }
 
             echo json_encode([
@@ -152,6 +172,7 @@ class CancelController {
                     b.booking_id,
                     b.total_price,
                     b.booking_status,
+                    b.payment_status,
                     b.cancel_policy_id,
                     b.trip_id,
                     t.departure_time
@@ -177,40 +198,59 @@ class CancelController {
             $departure_time   = $booking['departure_time'];
             $trip_id          = (int)$booking['trip_id'];
 
-            // 2) حساب الساعات المتبقية
-            $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-            $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-            $diff = $dep->getTimestamp() - $now->getTimestamp();
-            $hours_before_departure = $diff / 3600.0;
+            $payment_status = $booking['payment_status'] ?? 'Unpaid';
 
-            // 3) اختيار الـ rule
-            $sqlRule = "
-                SELECT *
-                FROM cancel_policy_rules
-                WHERE cancel_policy_id = :cpid
-                  AND is_active = TRUE
-                  AND min_hours_before_departure <= :hours::NUMERIC
-                  AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
-                ORDER BY min_hours_before_departure DESC
-                LIMIT 1
-            ";
-            $stmtRule = $this->conn->prepare($sqlRule);
-            $stmtRule->execute([
-                ':cpid'  => $cancel_policy_id,
-                ':hours' => $hours_before_departure
-            ]);
-            $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
-
-            if (!$rule) {
-                throw new Exception("No matching cancel rule for this time window");
-            }
-
-            $refund_percentage = (float)$rule['refund_percentage'];
-            $cancellation_fee  = (float)$rule['cancellation_fee'];
-
-            $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
-            if ($refund_amount < 0) {
-                $refund_amount = 0;
+            if ($payment_status === 'Unpaid') {
+                 // Unpaid -> Cancel directly with 0 refund
+                 $refund_percentage = 0;
+                 $cancellation_fee  = 0;
+                 $refund_amount     = 0;
+                 $rule = []; // No specific rule used
+                 
+                 // Calc hours just for logging
+                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
+                $diff = $dep->getTimestamp() - $now->getTimestamp();
+                $hours_before_departure = $diff / 3600.0;
+                
+            } else {
+                // Paid -> Apply Policy
+                
+                // 2) حساب الساعات المتبقية
+                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
+                $diff = $dep->getTimestamp() - $now->getTimestamp();
+                $hours_before_departure = $diff / 3600.0;
+    
+                // 3) اختيار الـ rule
+                $sqlRule = "
+                    SELECT *
+                    FROM cancel_policy_rules
+                    WHERE cancel_policy_id = :cpid
+                      AND is_active = TRUE
+                      AND min_hours_before_departure <= :hours::NUMERIC
+                      AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
+                    ORDER BY min_hours_before_departure DESC
+                    LIMIT 1
+                ";
+                $stmtRule = $this->conn->prepare($sqlRule);
+                $stmtRule->execute([
+                    ':cpid'  => $cancel_policy_id,
+                    ':hours' => $hours_before_departure
+                ]);
+                $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
+    
+                if (!$rule) {
+                    throw new Exception("No matching cancel rule for this time window");
+                }
+    
+                $refund_percentage = (float)$rule['refund_percentage'];
+                $cancellation_fee  = (float)$rule['cancellation_fee'];
+    
+                $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
+                if ($refund_amount < 0) {
+                    $refund_amount = 0;
+                }
             }
 
             // 4) تحديث حالة الحجز + الركاب + المقاعد
