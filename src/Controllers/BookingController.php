@@ -350,7 +350,17 @@ class BookingController {
         // 1. Authentication (Required for Audit Trail)
         $middleware = new \Travel\Middleware\AuthMiddleware();
         $actor = $middleware->validateToken(); // This will exit if invalid
-        $employee_id = $actor['user_id'];
+        
+        if (!isset($actor['user_id'])) {
+             // Debugging output
+             echo json_encode([
+                 "success" => false, 
+                 "error" => "Token valid but missing user_id. Payload: " . json_encode($actor, JSON_UNESCAPED_UNICODE)
+             ], JSON_UNESCAPED_UNICODE);
+             return;
+        }
+
+        $employee_id = (int)$actor['user_id'];
 
         $input = file_get_contents('php://input');
         $data  = json_decode($input, true);
