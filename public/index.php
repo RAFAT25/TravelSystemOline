@@ -198,12 +198,12 @@ switch ($uri) {
         }
         break;
 
-    case '/api/support/faqs/categories':
+    case '/api/support/faqs/list':
     case '/faqs_categories.php':
         if ($method === 'GET' || $method === 'POST') {
             // Allowing POST as well since some legacy clients might misuse it, but strictly it's a GET
             $controller = new \Travel\Controllers\SupportController();
-            $controller->getFaqCategories();
+            $controller->getFaqList();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);
