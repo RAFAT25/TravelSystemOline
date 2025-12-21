@@ -4,6 +4,8 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use Travel\Controllers\AuthController;
 use Travel\Controllers\BookingController;
+use Travel\Controllers\TripController;
+use Travel\Controllers\NotificationController;
 use Travel\Middleware\AuthMiddleware;
 use Dotenv\Dotenv;
 
@@ -31,6 +33,8 @@ if ($method === 'OPTIONS') {
 // Route Dispatcher
 switch ($uri) {
     case '/api/login':
+    case '/api/auth/login':
+    case '/login_user.php':
         if ($method === 'POST') {
             $controller = new AuthController();
             $controller->login();
@@ -40,11 +44,23 @@ switch ($uri) {
         }
         break;
 
-    case '/api/bookings':
+    case '/api/auth/register':
+    case '/register_user.php':
         if ($method === 'POST') {
-            // Protect Route
+            $controller = new AuthController();
+            $controller->register();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/bookings':
+    case '/api/bookings/create':
+    case '/create_booking.php':
+        if ($method === 'POST') {
             $middleware = new AuthMiddleware();
-            $user = $middleware->validateToken(); // Will exit if invalid
+            $middleware->validateToken();
             
             $controller = new BookingController();
             $controller->create();
@@ -54,60 +70,15 @@ switch ($uri) {
         }
         break;
 
-    case '/api/notifications/send-test':
+    case '/api/bookings/user':
+    case '/get_user_bookings.php':
         if ($method === 'POST') {
-            $controller = new \Travel\Controllers\NotificationController();
-            $controller->sendTest();
-        } else {
-            http_response_code(405);
-            echo json_encode(["error" => "Method not allowed"]);
-        }
-        break;
+            // Optional: Add AuthMiddleware if security is required for this endpoint
+            // $middleware = new AuthMiddleware();
+            // $middleware->validateToken();
 
-    case '/api/notifications/send':
-    case '/send_notification.php':
-        if ($method === 'POST') {
-            require_once __DIR__ . '/../send_notification.php';
-        } else {
-            http_response_code(405);
-            echo json_encode(["error" => "Method not allowed"]);
-        }
-        break;
-
-    case '/api/fcm/save-token':
-    case '/save_fcm_token.php':
-        if ($method === 'POST') {
-            require_once __DIR__ . '/../save_fcm_token.php';
-        } else {
-            http_response_code(405);
-            echo json_encode(["error" => "Method not allowed"]);
-        }
-        break;
-
-    case '/api/trips/search':
-    case '/serchTrip.php':
-        if ($method === 'POST') {
-            require_once __DIR__ . '/../serchTrip.php';
-        } else {
-            http_response_code(405);
-            echo json_encode(["error" => "Method not allowed"]);
-        }
-        break;
-
-    case '/api/seats/available':
-    case '/get_available_seats.php':
-        if ($method === 'POST') {
-            require_once __DIR__ . '/../get_available_seats.php';
-        } else {
-            http_response_code(405);
-            echo json_encode(["error" => "Method not allowed"]);
-        }
-        break;
-
-    case '/api/bookings/create':
-    case '/create_booking.php':
-        if ($method === 'POST') {
-            require_once __DIR__ . '/../create_booking.php';
+            $controller = new BookingController();
+            $controller->getUserBookings();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);
@@ -117,27 +88,115 @@ switch ($uri) {
     case '/api/payment/update':
     case '/payment_update.php':
         if ($method === 'POST') {
-            require_once __DIR__ . '/../payment_update.php';
+            $middleware = new AuthMiddleware();
+            $middleware->validateToken();
+
+            $controller = new BookingController();
+            $controller->updatePayment();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);
         }
         break;
 
-    case '/api/auth/register':
-    case '/register_user.php':
+    case '/api/trips/search':
+    case '/serchTrip.php':
         if ($method === 'POST') {
-            require_once __DIR__ . '/../register_user.php';
+            $controller = new TripController();
+            $controller->search();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);
         }
         break;
 
-    case '/api/auth/login':
-    case '/login_user.php':
+    case '/api/seats/available':
+    case '/get_available_seats.php':
         if ($method === 'POST') {
-            require_once __DIR__ . '/../login_user.php';
+            $controller = new TripController();
+            $controller->getAvailableSeats();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/notifications/send':
+    case '/send_notification.php':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $middleware->validateToken();
+
+            $controller = new NotificationController();
+            $controller->send();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/fcm/save-token':
+    case '/save_fcm_token.php':
+        if ($method === 'POST') {
+            $controller = new NotificationController();
+            $controller->saveToken();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/notifications/send-test':
+        if ($method === 'POST') {
+            $controller = new NotificationController();
+            $controller->sendTest();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/support/ticket':
+    case '/create_ticket.php':
+        if ($method === 'POST') {
+            $controller = new \Travel\Controllers\SupportController();
+            $controller->createTicket();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/auth/update-profile':
+    case '/update_profile.php':
+        if ($method === 'POST') {
+            // Optional: AuthMiddleware
+            $controller = new AuthController();
+            $controller->updateProfile();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/trips/search-ar':
+    case '/get_available_trips_ar.php':
+        if ($method === 'GET' || $method === 'POST') {
+             // Allowing GET/POST as per original script usage might be needed, assuming POST based on typical API
+            $controller = new TripController();
+            $controller->searchArabic();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/notifications/whatsapp':
+    case '/sendwats.php':
+        if ($method === 'POST') {
+            // Optional: AuthMiddleware
+            $controller = new NotificationController();
+            $controller->sendWhatsApp();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);

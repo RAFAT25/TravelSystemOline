@@ -132,6 +132,132 @@ class BookingController {
                 "success" => false,
                 "error" => $e->getMessage()
             ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updatePayment() {
+        header('Content-Type: application/json; charset=utf-8');
+        
+        $input = file_get_contents('php://input');
+        $data  = json_decode($input, true);
+
+        $booking_id     = isset($data['booking_id']) ? (int)$data['booking_id'] : 0;
+        $payment_status = isset($data['payment_status']) ? trim($data['payment_status']) : '';
+        $payment_method = isset($data['payment_method']) ? trim($data['payment_method']) : '';
+        $transaction_id = isset($data['transaction_id']) ? trim($data['transaction_id']) : '';
+
+        if ($booking_id <= 0 || $payment_status === '') {
+            echo json_encode([
+                "success" => false,
+                "error"   => "booking_id and payment_status are required"
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $allowedStatus = ['Unpaid', 'Paid', 'Refunded'];
+        if (!in_array($payment_status, $allowedStatus, true)) {
+            echo json_encode(["success" => false, "error" => "Invalid payment_status"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $allowedMethods = ['Electronic', 'Cash', 'Kareemi'];
+        if ($payment_method !== '' && !in_array($payment_method, $allowedMethods, true)) {
+            echo json_encode(["success" => false, "error" => "Invalid payment_method"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        try {
+            $sql = "
+                UPDATE bookings
+                SET payment_status = :status::payment_status_enum,
+                    payment_method = COALESCE(
+                                        NULLIF(:method, '')::payment_method_enum,
+                                        payment_method
+                                     ),
+                    payment_timestamp = CASE 
+                                            WHEN :status = 'Paid' THEN CURRENT_TIMESTAMP 
+                                            ELSE payment_timestamp 
+                                        END,
+                    gateway_transaction_id = COALESCE(NULLIF(:txn, ''), gateway_transaction_id)
+                WHERE booking_id = :booking_id
+            ";
+
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute([
+                ':status'     => $payment_status,
+                ':method'     => $payment_method,
+                ':txn'        => $transaction_id,
+                ':booking_id' => $booking_id,
+            ]);
+
+            if ($stmt->rowCount() > 0) {
+                echo json_encode(["success" => true, "booking_id" => $booking_id], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode(["success" => false, "error" => "Booking not found or no change made"], JSON_UNESCAPED_UNICODE);
+            }
+        } catch (Exception $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public function getUserBookings() {
+        header('Content-Type: application/json; charset=utf-8');
+        
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        // Try to get user_id from token if authenticated, otherwise from input
+        // For consistency with legacy, we check input, but in a real app we should prefer token
+        $userId = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+
+        if ($userId <= 0) {
+            echo json_encode([
+                "success" => false,
+                "error"   => "Invalid User ID"
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        try {
+            $sql = "
+                SELECT
+                    u.user_id,
+                    u.full_name,
+                    b.booking_id,
+                    b.booking_status,
+                    t.trip_id,
+                    t.departure_time,
+                    t.arrival_time,
+                    r.origin_city,
+                    r.destination_city,
+                    bc.class_name          AS bus_class,
+                    p.company_name,
+                    t.base_price
+                FROM users u
+                JOIN bookings b     ON b.user_id      = u.user_id
+                JOIN trips t        ON t.trip_id      = b.trip_id
+                JOIN routes r       ON t.route_id     = r.route_id
+                JOIN buses bu       ON t.bus_id       = bu.bus_id
+                JOIN bus_classes bc ON bu.bus_class_id = bc.bus_class_id
+                JOIN partners p     ON t.partner_id   = p.partner_id
+                WHERE u.user_id = :user_id
+                ORDER BY b.booking_id DESC
+            ";
+
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute([':user_id' => $userId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                "success"  => true,
+                "count"    => count($rows),
+                "bookings" => $rows
+            ], JSON_UNESCAPED_UNICODE);
+
+        } catch (Exception $e) {
+            echo json_encode([
+                "success" => false,
+                "error"   => "Server Error: " . $e->getMessage()
+            ], JSON_UNESCAPED_UNICODE);
         }
     }
 }

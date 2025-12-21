@@ -43,7 +43,15 @@ class AuthMiddleware {
 
         try {
             $decoded = JWT::decode($jwt, new Key($this->secret_key, 'HS256'));
-            return (array) $decoded->data; // Return user data
+            
+            // Check if 'data' property exists (custom payload) or return whole object (standard)
+            if (isset($decoded->data)) {
+                return (array) $decoded->data;
+            } else {
+                // If token has no 'data' wrapper, return standard claims (sub, etc) if needed,
+                // or just cast the whole object to array for backward compatibility.
+                return (array) $decoded;
+            }
         } catch (Exception $e) {
             $this->sendError("Access denied: " . $e->getMessage());
         }
