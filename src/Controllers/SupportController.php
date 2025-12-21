@@ -57,4 +57,30 @@ class SupportController {
             echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
         }
     }
+
+    public function getFaqCategories() {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $sql = "
+                SELECT category, COUNT(*) AS count
+                FROM faqs
+                WHERE is_active = TRUE
+                GROUP BY category
+                ORDER BY category ASC
+            ";
+            
+            $stmt = $this->conn->query($sql);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'success' => true,
+                'data' => $rows
+            ], JSON_UNESCAPED_UNICODE);
+
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
 }
