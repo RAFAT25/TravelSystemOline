@@ -241,6 +241,189 @@ switch ($uri) {
         }
         break;
 
+    case '/api/commissions/partner':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->getPartnerCommissions();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/daily-summary':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->getDailySummary();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/booking':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->getBookingCommission();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/mark-paid':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireAdmin($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->markAsPaid();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/partner/stats':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->getPartnerStats();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/partial-refund':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->handlePartialRefund();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/commissions/refunds':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\CommissionController();
+            $controller->getRefundReports();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/refunds/process':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\RefundController();
+            $controller->processRefund($actor);
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/refunds/complete':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\RefundController();
+            $controller->completeRefund($actor);
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/refunds/list':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
+            $controller = new \Travel\Controllers\RefundController();
+            $controller->getRefunds();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/refunds/booking':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $controller = new \Travel\Controllers\RefundController();
+            $controller->getRefundByBooking();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/refunds/calculate-fee':
+        if ($method === 'GET') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $controller = new \Travel\Controllers\RefundController();
+            $controller->calculateFee();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
     case '/api/notifications/whatsapp':
     case '/sendwats.php':
         if ($method === 'POST') {
