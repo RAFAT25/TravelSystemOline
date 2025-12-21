@@ -99,6 +99,27 @@ switch ($uri) {
         }
         break;
 
+    case '/api/bookings/cancel-preview':
+        if ($method === 'GET') {
+            $controller = new \Travel\Controllers\CancelController();
+            $controller->preview();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/bookings/cancel':
+        if ($method === 'POST') {
+             // Optional: AuthMiddleware check if needed
+            $controller = new \Travel\Controllers\CancelController();
+            $controller->confirm();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
     case '/api/trips/search':
     case '/serchTrip.php':
         if ($method === 'POST' || $method === 'GET') {
