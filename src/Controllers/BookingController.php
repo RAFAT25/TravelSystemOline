@@ -342,6 +342,7 @@ class BookingController {
                 "error"   => "Server Error: " . $e->getMessage()
             ], JSON_UNESCAPED_UNICODE);
     }
+}
 
     public function confirmBooking() {
         header('Content-Type: application/json; charset=utf-8');
