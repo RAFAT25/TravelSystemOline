@@ -3,7 +3,7 @@
 namespace Travel\Controllers;
 
 use Travel\Config\Database;
-use Travel\Config\Database;
+
 use Travel\Services\Whapi;
 use Travel\Services\FcmService;
 use PDO;
