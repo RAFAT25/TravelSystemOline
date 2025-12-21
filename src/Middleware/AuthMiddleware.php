@@ -44,14 +44,17 @@ class AuthMiddleware {
         try {
             $decoded = JWT::decode($jwt, new Key($this->secret_key, 'HS256'));
             
-            // Check if 'data' property exists (custom payload) or return whole object (standard)
-            if (isset($decoded->data)) {
-                return (array) $decoded->data;
-            } else {
-                // If token has no 'data' wrapper, return standard claims (sub, etc) if needed,
-                // or just cast the whole object to array for backward compatibility.
-                return (array) $decoded;
+            // Convert object to array
+            $claims = (array) $decoded;
+
+            // If 'data' exists, merge its content into the main array
+            // This handles { "data": { "user_id": 1 } } AND { "user_id": 1 } formats
+            if (isset($claims['data'])) {
+                $data = (array) $claims['data'];
+                $claims = array_merge($claims, $data);
             }
+            
+            return $claims;
         } catch (Exception $e) {
             // For debugging: show what was received (first 10 chars)
             $debugToken = substr($jwt, 0, 10) . "...";

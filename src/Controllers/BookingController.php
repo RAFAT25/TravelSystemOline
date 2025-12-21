@@ -352,11 +352,9 @@ class BookingController {
         $actor = $middleware->validateToken(); // This will exit if invalid
         
         if (!isset($actor['user_id'])) {
-             // Debugging output
-             echo json_encode([
-                 "success" => false, 
-                 "error" => "Token valid but missing user_id. Payload: " . json_encode($actor, JSON_UNESCAPED_UNICODE)
-             ], JSON_UNESCAPED_UNICODE);
+             // Should not happen with new Middleware logic, but safe guard
+             http_response_code(401);
+             echo json_encode(["success" => false, "error" => "Invalid Token Payload: Missing user_id"], JSON_UNESCAPED_UNICODE);
              return;
         }
 
