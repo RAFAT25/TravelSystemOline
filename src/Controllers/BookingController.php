@@ -423,8 +423,7 @@ class BookingController {
             $stmtUpdate = $this->conn->prepare("
                 UPDATE bookings
                 SET booking_status = 'Confirmed',
-                    payment_status = :pstatus,
-                    confirmation_timestamp = CURRENT_TIMESTAMP
+                    payment_status = :pstatus
                 WHERE booking_id = :bid
             ");
 
