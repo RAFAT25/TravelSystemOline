@@ -349,13 +349,13 @@ class BookingController {
 
         if ($status === 'Unpaid') {
             $title = "تم إنشاء الحجز بنجاح";
-            $body  = "مرحبا $userName، تم حجز رحلتك رقم $bookingId. يرجى الدفع لإتمام التأكيد. المبلغ: $totalPrice";
+            $body  = "مرحبا {$userName}، تم حجز رحلتك رقم {$bookingId}. يرجى الدفع لإتمام التأكيد. المبلغ: {$totalPrice}";
         } elseif ($status === 'Paid') {
             $title = "تم الدفع بنجاح";
-            $body  = "مرحبا $userName، تم استلام دفعة الحجز رقم $bookingId بنجاح. نتمنى لك رحلة سعيدة!";
+            $body  = "مرحبا {$userName}، تم استلام دفعة الحجز رقم {$bookingId} بنجاح. نتمنى لك رحلة سعيدة!";
         } elseif ($status === 'Refunded') {
             $title = "تم استرداد المبلغ";
-            $body  = "مرحبا $userName، تم استرداد مبلغ الحجز رقم $bookingId.";
+            $body  = "مرحبا {$userName}، تم استرداد مبلغ الحجز رقم {$bookingId}.";
         } else {
             return;
         }
