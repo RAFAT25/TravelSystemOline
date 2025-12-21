@@ -83,4 +83,36 @@ class SupportController {
             echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
     }
+    public function getFaqList() {
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        $sql = "
+            SELECT 
+                faq_id    AS id,
+                category,
+                question,
+                answer
+            FROM faqs
+            WHERE is_active = TRUE
+            ORDER BY category ASC, faq_id ASC
+        ";
+
+        $stmt = $this->conn->query($sql);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'data'    => $rows
+        ], JSON_UNESCAPED_UNICODE);
+
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Server error: ' . $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
+    }
+}
+
 }
