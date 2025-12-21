@@ -193,6 +193,10 @@ switch ($uri) {
             $middleware = new AuthMiddleware();
             $actor = $middleware->validateToken();
             
+            // Require employee role
+            $roleMiddleware = new \Travel\Middleware\RoleMiddleware();
+            $roleMiddleware->requireEmployee($actor);
+            
             $controller = new \Travel\Controllers\BookingController();
             $controller->confirmBooking($actor);
         } else {

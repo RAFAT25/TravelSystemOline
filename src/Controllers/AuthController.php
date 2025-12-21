@@ -38,7 +38,7 @@ class AuthController {
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id, full_name, email, password_hash FROM users WHERE email = :email");
+        $stmt = $this->conn->prepare("SELECT user_id, full_name, email, password_hash, user_type FROM users WHERE email = :email");
         $stmt->execute([':email' => $email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -53,7 +53,8 @@ class AuthController {
                 'data' => [
                     'user_id' => $user['user_id'],
                     'email' => $user['email'],
-                    'name' => $user['full_name']
+                    'name' => $user['full_name'],
+                    'user_type' => $user['user_type']
                 ]
             ];
 
@@ -64,6 +65,7 @@ class AuthController {
                 "user_id"   => $user['user_id'],
                 "user_name" => $user['full_name'],
                 "userEmail" => $user['email'],
+                "user_type" => $user['user_type'],
                 "token"     => $jwt
             ], JSON_UNESCAPED_UNICODE);
         } else {
