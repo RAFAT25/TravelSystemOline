@@ -190,8 +190,11 @@ switch ($uri) {
 
     case '/api/bookings/confirm':
         if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
             $controller = new \Travel\Controllers\BookingController();
-            $controller->confirmBooking();
+            $controller->confirmBooking($actor);
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);

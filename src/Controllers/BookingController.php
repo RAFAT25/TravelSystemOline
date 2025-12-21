@@ -344,15 +344,12 @@ class BookingController {
     }
 }
 
-    public function confirmBooking() {
+    public function confirmBooking($actor = null) {
         header('Content-Type: application/json; charset=utf-8');
 
         // 1. Authentication (Required for Audit Trail)
-        $middleware = new \Travel\Middleware\AuthMiddleware();
-        $actor = $middleware->validateToken(); // This will exit if invalid
-        
-        if (!isset($actor['user_id'])) {
-             // Should not happen with new Middleware logic, but safe guard
+        // Token validation is now done at the routing level
+        if (!$actor || !isset($actor['user_id'])) {
              http_response_code(401);
              echo json_encode(["success" => false, "error" => "Invalid Token Payload: Missing user_id"], JSON_UNESCAPED_UNICODE);
              return;
