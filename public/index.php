@@ -72,7 +72,7 @@ switch ($uri) {
 
     case '/api/bookings/user':
     case '/get_user_bookings.php':
-        if ($method === 'POST') {
+        if ($method === 'POST' || $method === 'GET') {
             // Optional: Add AuthMiddleware if security is required for this endpoint
             // $middleware = new AuthMiddleware();
             // $middleware->validateToken();
@@ -101,7 +101,7 @@ switch ($uri) {
 
     case '/api/trips/search':
     case '/serchTrip.php':
-        if ($method === 'POST') {
+        if ($method === 'POST' || $method === 'GET') {
             $controller = new TripController();
             $controller->search();
         } else {
@@ -112,7 +112,7 @@ switch ($uri) {
 
     case '/api/seats/available':
     case '/get_available_seats.php':
-        if ($method === 'POST') {
+        if ($method === 'POST' || $method === 'GET') {
             $controller = new TripController();
             $controller->getAvailableSeats();
         } else {
@@ -161,6 +161,18 @@ switch ($uri) {
         if ($method === 'POST') {
             $controller = new \Travel\Controllers\SupportController();
             $controller->createTicket();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/support/faqs/categories':
+    case '/faqs_categories.php':
+        if ($method === 'GET' || $method === 'POST') {
+            // Allowing POST as well since some legacy clients might misuse it, but strictly it's a GET
+            $controller = new \Travel\Controllers\SupportController();
+            $controller->getFaqCategories();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);

@@ -21,10 +21,11 @@ class TripController {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
-        $from_stop = isset($data['from_stop']) ? $data['from_stop'] : '';
-        $to_city   = isset($data['to_city'])   ? $data['to_city']   : '';
-        $date      = isset($data['date'])      ? $data['date']      : '';
-        $bus_class = isset($data['bus_class']) ? $data['bus_class'] : '';
+        // Support for both POST (JSON) and GET (Query Params)
+        $from_stop = $data['from_stop'] ?? ($_GET['from_stop'] ?? '');
+        $to_city   = $data['to_city']   ?? ($_GET['to_city']   ?? '');
+        $date      = $data['date']      ?? ($_GET['date']      ?? '');
+        $bus_class = $data['bus_class'] ?? ($_GET['bus_class'] ?? '');
 
         if (empty($from_stop) || empty($to_city) || empty($date) || empty($bus_class)) {
             echo json_encode(["success" => false, "error" => "All fields are required"], JSON_UNESCAPED_UNICODE);
@@ -109,7 +110,8 @@ class TripController {
         $input = file_get_contents('php://input');
         $data  = json_decode($input, true);
 
-        $trip_id = isset($data['trip_id']) ? (int)$data['trip_id'] : 0;
+        // Support for both POST (JSON) and GET (Query Params)
+        $trip_id = isset($data['trip_id']) ? (int)$data['trip_id'] : (isset($_GET['trip_id']) ? (int)$_GET['trip_id'] : 0);
 
         if ($trip_id <= 0) {
             echo json_encode(["success" => false, "error" => "trip_id is required"], JSON_UNESCAPED_UNICODE);

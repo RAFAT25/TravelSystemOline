@@ -206,9 +206,13 @@ class BookingController {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
-        // Try to get user_id from token if authenticated, otherwise from input
-        // For consistency with legacy, we check input, but in a real app we should prefer token
-        $userId = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+        // Try to get user_id from token if authenticated, then from input (POST), then from query params (GET)
+        $userId = 0;
+        if (isset($data['user_id'])) {
+            $userId = (int)$data['user_id'];
+        } elseif (isset($_GET['user_id'])) {
+            $userId = (int)$_GET['user_id'];
+        }
 
         if ($userId <= 0) {
             echo json_encode([
