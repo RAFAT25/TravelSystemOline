@@ -438,7 +438,7 @@ class BookingController {
             $this->sendBookingNotifications(
                 $booking['user_id'], 
                 $booking_id, 
-                $newPaymentStatus, // This will trigger 'Paid' msg if status changed to Paid, or default logic
+                'Confirmed', // ✅ إرسال حالة التأكيد
                 $booking['total_price'], 
                 $booking['phone_number'], 
                 $booking['full_name']
@@ -472,6 +472,9 @@ class BookingController {
         } elseif ($status === 'Refunded') {
             $title = "تم استرداد المبلغ";
             $body  = "مرحبا {$userName}، تم استرداد مبلغ الحجز رقم {$bookingId}.";
+        } elseif ($status === 'Confirmed') {
+            $title = "تم تأكيد الحجز";
+            $body  = "مرحبا {$userName}، تم تأكيد حجزك رقم {$bookingId} بنجاح! نتمنى لك رحلة سعيدة.";
         } else {
             return;
         }
