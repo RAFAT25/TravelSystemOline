@@ -3,6 +3,9 @@
 namespace Travel\Controllers;
 
 use Travel\Config\Database;
+use Travel\Config\Database;
+use Travel\Services\Whapi;
+use Travel\Services\FcmService;
 use PDO;
 use Exception;
 
@@ -53,6 +56,13 @@ class BookingController {
 
         $partner_id     = (int)$tripRow['partner_id'];
         $departure_time = $tripRow['departure_time'];
+
+        // 0.05) Get User Phone Number (for notifications)
+        $stmtUser = $this->conn->prepare("SELECT phone_number, full_name FROM users WHERE user_id = :uid");
+        $stmtUser->execute([':uid' => $user_id]);
+        $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+        $userPhone = $userRow['phone_number'] ?? '';
+        $userName  = $userRow['full_name'] ?? 'Customer';
 
         // 0.1) جلب سياسة الإلغاء الافتراضية لهذا الشريك
         $stmtPolicy = $this->conn->prepare("
@@ -166,6 +176,11 @@ class BookingController {
             "cancel_policy_id" => $cancel_policy_id
         ], JSON_UNESCAPED_UNICODE);
 
+        // --- Centralized Notifications ---
+        $this->sendBookingNotifications($user_id, $booking_id, 'Unpaid', $total_price, $userPhone, $userName);
+
+
+
     } catch (Exception $e) {
         if ($this->conn->inTransaction()) {
             $this->conn->rollBack();
@@ -234,6 +249,26 @@ class BookingController {
             ]);
 
             if ($stmt->rowCount() > 0) {
+                 // Fetch User Info for Notification
+                 $stmtU = $this->conn->prepare("
+                    SELECT u.user_id, u.phone_number, u.full_name, b.total_price 
+                    FROM bookings b
+                    JOIN users u ON u.user_id = b.user_id
+                    WHERE b.booking_id = :bid
+                 ");
+                 $stmtU->execute([':bid' => $booking_id]);
+                 $rowU = $stmtU->fetch(PDO::FETCH_ASSOC);
+
+                 if ($rowU) {
+                     $uId    = (int)$rowU['user_id'];
+                     $uPhone = $rowU['phone_number'];
+                     $uName  = $rowU['full_name'];
+                     $tPrice = $rowU['total_price'];
+                     
+                     // Trigger Notifications for Paid/Refunded
+                     $this->sendBookingNotifications($uId, $booking_id, $payment_status, $tPrice, $uPhone, $uName);
+                 }
+
                 echo json_encode(["success" => true, "booking_id" => $booking_id], JSON_UNESCAPED_UNICODE);
             } else {
                 echo json_encode(["success" => false, "error" => "Booking not found or no change made"], JSON_UNESCAPED_UNICODE);
@@ -307,5 +342,56 @@ class BookingController {
                 "error"   => "Server Error: " . $e->getMessage()
             ], JSON_UNESCAPED_UNICODE);
         }
+    }
+    private function sendBookingNotifications($userId, $bookingId, $status, $totalPrice, $userPhone, $userName) {
+        $title = "";
+        $body  = "";
+
+        if ($status === 'Unpaid') {
+            $title = "تم إنشاء الحجز بنجاح";
+            $body  = "مرحبا $userName، تم حجز رحلتك رقم $bookingId. يرجى الدفع لإتمام التأكيد. المبلغ: $totalPrice";
+        } elseif ($status === 'Paid') {
+            $title = "تم الدفع بنجاح";
+            $body  = "مرحبا $userName، تم استلام دفعة الحجز رقم $bookingId بنجاح. نتمنى لك رحلة سعيدة!";
+        } elseif ($status === 'Refunded') {
+            $title = "تم استرداد المبلغ";
+            $body  = "مرحبا $userName، تم استرداد مبلغ الحجز رقم $bookingId.";
+        } else {
+            return;
+        }
+
+        // 1. Database Notification
+        try {
+            $stmtN = $this->conn->prepare("
+                INSERT INTO notifications (user_id, title, message, type, related_id)
+                VALUES (:uid, :title, :msg, 'booking', :rid)
+            ");
+            $stmtN->execute([
+                ':uid'   => $userId,
+                ':title' => $title,
+                ':msg'   => $body,
+                ':rid'   => $bookingId
+            ]);
+        } catch (\Throwable $e) { /* Ignore */ }
+
+        // 2. WhatsApp Notification
+        if (!empty($userPhone)) {
+            try {
+                Whapi::sendText($userPhone, $body);
+            } catch (\Throwable $e) { /* Ignore */ }
+        }
+
+        // 3. FCM Notification
+        try {
+            // Fetch Token
+            $stmtT = $this->conn->prepare("SELECT fcm_token FROM user_device_tokens WHERE user_id = :uid ORDER BY created_at DESC LIMIT 1");
+            $stmtT->execute([':uid' => $userId]);
+            $tokenRow = $stmtT->fetch(PDO::FETCH_ASSOC);
+
+            if ($tokenRow && !empty($tokenRow['fcm_token'])) {
+                $fcm = new FcmService();
+                $fcm->sendNotification($tokenRow['fcm_token'], $title, $body, ['booking_id' => (string)$bookingId]);
+            }
+        } catch (\Throwable $e) { /* Ignore */ }
     }
 }

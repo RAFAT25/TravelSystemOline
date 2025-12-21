@@ -3,6 +3,7 @@
 namespace Travel\Controllers;
 
 use Travel\Services\FcmService;
+use Travel\Services\Whapi;
 
 class NotificationController {
     
@@ -117,7 +118,30 @@ class NotificationController {
 
             echo json_encode(["success" => true, "message" => "Token saved successfully"], JSON_UNESCAPED_UNICODE);
 
-        } catch (\PDOException $e) {
+            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public function sendWhatsApp() {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $input = file_get_contents('php://input');
+        $data  = json_decode($input, true);
+
+        $to   = $data["to"]   ?? null;
+        $body = $data["body"] ?? null;
+
+        if (!$to || !$body) {
+            http_response_code(400);
+            echo json_encode(["success" => false, "error" => "Send 'to' and 'body' in JSON"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        try {
+            $result = Whapi::sendText($to, $body);
+            echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(500);
             echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
     }
