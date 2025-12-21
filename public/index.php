@@ -188,6 +188,16 @@ switch ($uri) {
         }
         break;
 
+    case '/api/bookings/confirm':
+        if ($method === 'POST') {
+            $controller = new \Travel\Controllers\BookingController();
+            $controller->confirmBooking();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
     case '/api/support/faqs/categories':
     case '/faqs_categories.php':
         if ($method === 'GET' || $method === 'POST') {

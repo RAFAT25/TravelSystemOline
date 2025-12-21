@@ -341,8 +341,119 @@ class BookingController {
                 "success" => false,
                 "error"   => "Server Error: " . $e->getMessage()
             ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function confirmBooking() {
+        header('Content-Type: application/json; charset=utf-8');
+
+        // 1. Authentication (Required for Audit Trail)
+        $middleware = new \Travel\Middleware\AuthMiddleware();
+        $actor = $middleware->validateToken(); // This will exit if invalid
+        $employee_id = $actor['user_id'];
+
+        $input = file_get_contents('php://input');
+        $data  = json_decode($input, true);
+
+        $booking_id          = isset($data['booking_id']) ? (int)$data['booking_id'] : 0;
+        $force_payment_status = isset($data['payment_status']) ? trim($data['payment_status']) : '';
+        $notes               = isset($data['notes']) ? trim($data['notes']) : '';
+
+        if ($booking_id <= 0) {
+            echo json_encode(["success" => false, "error" => "Invalid booking_id"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $allowedPayment = ['Unpaid', 'Paid', 'Refunded'];
+        if ($force_payment_status !== '' && !in_array($force_payment_status, $allowedPayment, true)) {
+            echo json_encode(["success" => false, "error" => "Invalid payment_status"], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        try {
+            $this->conn->beginTransaction();
+
+            $stmt = $this->conn->prepare("
+                SELECT b.booking_status, b.payment_status, b.total_price, u.user_id, u.phone_number, u.full_name
+                FROM bookings b
+                JOIN users u ON u.user_id = b.user_id
+                WHERE b.booking_id = :bid
+                FOR UPDATE
+            ");
+            $stmt->execute([':bid' => $booking_id]);
+            $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$booking) {
+                throw new Exception("Booking not found");
+            }
+
+            if ($booking['booking_status'] !== 'Pending') {
+                throw new Exception("Only Pending bookings can be confirmed");
+            }
+            
+            $oldStatus = $booking['booking_status'];
+
+            $newPaymentStatus = $booking['payment_status'];
+            if ($force_payment_status !== '') {
+                $newPaymentStatus = $force_payment_status;
+            }
+
+            // --- Audit Trail Insert ---
+            $ip_address = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+            $stmtAudit = $this->conn->prepare("
+                INSERT INTO booking_approvals 
+                (booking_id, employee_id, action_type, old_status, new_status, notes, ip_address)
+                VALUES 
+                (:bid, :eid, 'CONFIRM_BOOKING', :old_s, 'Confirmed', :notes, :ip)
+            ");
+            $stmtAudit->execute([
+                ':bid'     => $booking_id,
+                ':eid'     => $employee_id,
+                ':old_s'   => $oldStatus,
+                ':notes'   => $notes ?: "Payment Status: $newPaymentStatus",
+                ':ip'      => $ip_address
+            ]);
+            // --------------------------
+
+            $stmtUpdate = $this->conn->prepare("
+                UPDATE bookings
+                SET booking_status = 'Confirmed',
+                    payment_status = :pstatus,
+                    confirmation_timestamp = CURRENT_TIMESTAMP
+                WHERE booking_id = :bid
+            ");
+
+            $stmtUpdate->execute([
+                ':pstatus' => $newPaymentStatus,
+                ':bid'     => $booking_id
+            ]);
+
+            $this->conn->commit();
+
+            // Trigger Notifications
+            $this->sendBookingNotifications(
+                $booking['user_id'], 
+                $booking_id, 
+                $newPaymentStatus, // This will trigger 'Paid' msg if status changed to Paid, or default logic
+                $booking['total_price'], 
+                $booking['phone_number'], 
+                $booking['full_name']
+            );
+
+            echo json_encode([
+                "success"        => true,
+                "booking_id"     => $booking_id,
+                "booking_status" => "Confirmed",
+                "payment_status" => $newPaymentStatus
+            ], JSON_UNESCAPED_UNICODE);
+
+        } catch (Exception $e) {
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollBack();
+            }
+            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
     }
+
     private function sendBookingNotifications($userId, $bookingId, $status, $totalPrice, $userPhone, $userName) {
         $title = "";
         $body  = "";
