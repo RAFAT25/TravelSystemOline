@@ -75,8 +75,8 @@ class CancelController {
                 FROM cancel_policy_rules
                 WHERE cancel_policy_id = :cpid
                   AND is_active = TRUE
-                  AND min_hours_before_departure <= :hours
-                  AND (max_hours_before_departure IS NULL OR :hours < max_hours_before_departure)
+                  AND min_hours_before_departure <= :hours::NUMERIC
+                  AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
                 ORDER BY min_hours_before_departure DESC
                 LIMIT 1
             ";
@@ -189,8 +189,8 @@ class CancelController {
                 FROM cancel_policy_rules
                 WHERE cancel_policy_id = :cpid
                   AND is_active = TRUE
-                  AND min_hours_before_departure <= :hours
-                  AND (max_hours_before_departure IS NULL OR :hours < max_hours_before_departure)
+                  AND min_hours_before_departure <= :hours::NUMERIC
+                  AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
                 ORDER BY min_hours_before_departure DESC
                 LIMIT 1
             ";
