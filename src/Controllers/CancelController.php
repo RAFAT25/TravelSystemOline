@@ -14,11 +14,15 @@ class CancelController {
         $this->conn = $db->connect();
     }
 
-    // GET /api/bookings/cancel-preview?booking_id=...
+    // GET/POST /api/bookings/cancel-preview
     public function preview() {
         header('Content-Type: application/json; charset=utf-8');
 
-        $booking_id = isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0;
+        $input = file_get_contents('php://input');
+        $data  = json_decode($input, true);
+
+        // Support for both POST (JSON) and GET (Query Params)
+        $booking_id = isset($data['booking_id']) ? (int)$data['booking_id'] : (isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0);
 
         if ($booking_id <= 0) {
             echo json_encode(["success" => false, "error" => "Invalid booking_id"], JSON_UNESCAPED_UNICODE);

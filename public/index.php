@@ -100,7 +100,7 @@ switch ($uri) {
         break;
 
     case '/api/bookings/cancel-preview':
-        if ($method === 'GET') {
+        if ($method === 'GET' || $method === 'POST') {
             $controller = new \Travel\Controllers\CancelController();
             $controller->preview();
         } else {

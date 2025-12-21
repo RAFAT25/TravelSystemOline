@@ -53,7 +53,9 @@ class AuthMiddleware {
                 return (array) $decoded;
             }
         } catch (Exception $e) {
-            $this->sendError("Access denied: " . $e->getMessage());
+            // For debugging: show what was received (first 10 chars)
+            $debugToken = substr($jwt, 0, 10) . "...";
+            $this->sendError("Access denied: " . $e->getMessage() . " (Received: $debugToken)");
         }
     }
 
