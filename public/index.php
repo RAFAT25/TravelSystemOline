@@ -159,6 +159,9 @@ switch ($uri) {
     case '/api/fcm/save-token':
     case '/save_fcm_token.php':
         if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $middleware->validateToken();
+
             $controller = new NotificationController();
             $controller->saveToken();
         } else {
