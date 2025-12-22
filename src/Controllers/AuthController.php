@@ -36,7 +36,7 @@ class AuthController {
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id, full_name, email, password_hash, user_type FROM users WHERE email = :email");
+        $stmt = $this->conn->prepare("SELECT user_id, full_name, email, phone_number, password_hash, user_type FROM users WHERE email = :email");
         $stmt->execute([':email' => $email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -59,11 +59,12 @@ class AuthController {
             $jwt = JWT::encode($payload, $this->secret_key, 'HS256');
 
             Response::success([
-                "user_id"   => $user['user_id'],
-                "user_name" => $user['full_name'],
-                "userEmail" => $user['email'],
-                "user_type" => $user['user_type'],
-                "token"     => $jwt
+                "user_id"      => $user['user_id'],
+                "user_name"    => $user['full_name'],
+                "userEmail"    => $user['email'],
+                "phone_number" => $user['phone_number'],
+                "user_type"    => $user['user_type'],
+                "token"        => $jwt
             ]);
         } else {
             Response::error("Invalid credentials", 401);
