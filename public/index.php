@@ -77,8 +77,11 @@ switch ($uri) {
 
     case '/api/auth/reset-password':
         if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+
             $controller = new AuthController();
-            $controller->resetPassword();
+            $controller->resetPassword($actor);
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);

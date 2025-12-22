@@ -157,6 +157,12 @@ class AuthController {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
+        // Security check: ensure this is NOT a temporary reset token
+        if (isset($actor['purpose']) && $actor['purpose'] === 'password_reset') {
+            Response::error("Password reset token cannot be used for this operation.", 403);
+            return;
+        }
+
         // Get user_id from token (actor) primarily for security
         $userId = ($actor && isset($actor['user_id'])) ? (int)$actor['user_id'] : 0;
         
@@ -290,33 +296,46 @@ class AuthController {
             return;
         }
 
-        Response::success([], "Code verified successfully");
+        // Generate temporary Reset Token (valid for 10 minutes)
+        $issuedAt = time();
+        $expirationTime = $issuedAt + (60 * 10); 
+        
+        $payload = [
+            'iat' => $issuedAt,
+            'exp' => $expirationTime,
+            'data' => [
+                'user_id' => $user['user_id'],
+                'purpose' => 'password_reset'
+            ]
+        ];
+
+        $resetToken = JWT::encode($payload, $this->secret_key, 'HS256');
+
+        Response::success([
+            "reset_token" => $resetToken
+        ], "Code verified successfully. You can now reset your password.");
     }
 
-    public function resetPassword() {
+    public function resetPassword($actor = null) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
-        $identifier = $data['identifier'] ?? $data['email'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
-        $code = $data['code'] ?? '';
+        
+        // Security check: ensure this is a VALID reset token
+        $userId = ($actor && isset($actor['user_id'])) ? (int)$actor['user_id'] : 0;
+        $purpose = $actor['purpose'] ?? '';
+
+        if ($userId <= 0 || $purpose !== 'password_reset') {
+            Response::error("Invalid or expired reset token", 401);
+            return;
+        }
+
         $newPassword = $data['new_password'] ?? '';
 
-        if (empty($identifier) || empty($code) || empty($newPassword)) {
-            Response::error("Email/Phone, code and new password are required", 400);
-            return;
-        }
-
-        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE (email = :id OR phone_number = :id) AND verification_code = :code");
-        $stmt->execute([':id' => $identifier, ':code' => $code]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$user) {
-            Response::error("Invalid code or email", 401);
-            return;
-        }
-
         $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        
+        // Update password and CLEAR the verification code so it can't be used again
         $stmt = $this->conn->prepare("UPDATE users SET password_hash = :pass, verification_code = NULL, updated_at = NOW() WHERE user_id = :id");
-        $stmt->execute([':pass' => $newHash, ':id' => $user['user_id']]);
+        $stmt->execute([':pass' => $newHash, ':id' => $userId]);
 
         Response::success([], "Password reset successfully");
     }
