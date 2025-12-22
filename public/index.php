@@ -55,6 +55,36 @@ switch ($uri) {
         }
         break;
 
+    case '/api/auth/forgot-password':
+        if ($method === 'POST') {
+            $controller = new AuthController();
+            $controller->forgotPassword();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/auth/verify-code':
+        if ($method === 'POST') {
+            $controller = new AuthController();
+            $controller->verifyResetCode();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/auth/reset-password':
+        if ($method === 'POST') {
+            $controller = new AuthController();
+            $controller->resetPassword();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
     case '/api/bookings':
     case '/api/bookings/create':
     case '/create_booking.php':

@@ -205,15 +205,15 @@ class AuthController {
     public function forgotPassword() {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
-        $email = $data['email'] ?? '';
+        $identifier = $data['identifier'] ?? $data['email'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
 
-        if (empty($email)) {
-            Response::error("Email is required", 400);
+        if (empty($identifier)) {
+            Response::error("Email or Phone is required", 400);
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email");
-        $stmt->execute([':email' => $email]);
+        $stmt = $this->conn->prepare("SELECT user_id, email, phone_number FROM users WHERE email = :id OR phone_number = :id");
+        $stmt->execute([':id' => $identifier]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
@@ -234,16 +234,16 @@ class AuthController {
     public function verifyResetCode() {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
-        $email = $data['email'] ?? '';
+        $identifier = $data['identifier'] ?? $data['email'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
         $code = $data['code'] ?? '';
 
-        if (empty($email) || empty($code)) {
-            Response::error("Email and code are required", 400);
+        if (empty($identifier) || empty($code)) {
+            Response::error("Email/Phone and code are required", 400);
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email AND verification_code = :code");
-        $stmt->execute([':email' => $email, ':code' => $code]);
+        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE (email = :id OR phone_number = :id) AND verification_code = :code");
+        $stmt->execute([':id' => $identifier, ':code' => $code]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
@@ -257,17 +257,17 @@ class AuthController {
     public function resetPassword() {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
-        $email = $data['email'] ?? '';
+        $identifier = $data['identifier'] ?? $data['email'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
         $code = $data['code'] ?? '';
         $newPassword = $data['new_password'] ?? '';
 
-        if (empty($email) || empty($code) || empty($newPassword)) {
-            Response::error("Email, code and new password are required", 400);
+        if (empty($identifier) || empty($code) || empty($newPassword)) {
+            Response::error("Email/Phone, code and new password are required", 400);
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email AND verification_code = :code");
-        $stmt->execute([':email' => $email, ':code' => $code]);
+        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE (email = :id OR phone_number = :id) AND verification_code = :code");
+        $stmt->execute([':id' => $identifier, ':code' => $code]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
