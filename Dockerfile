@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     zip \
     unzip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -31,7 +32,8 @@ WORKDIR /var/www/html
 COPY . .
 
 # Run Composer Install
-RUN composer install --no-dev --optimize-autoloader
+# Run Composer Install
+RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs
 
 # Change DocumentRoot to /var/www/html/public
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public

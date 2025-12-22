@@ -9,6 +9,12 @@
         "kreait/firebase-php": "^7.0",
         "guzzlehttp/guzzle": "^7.0"
     },
+    "config": {
+        "platform-check": false,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
     "autoload": {
         "psr-4": {
             "Travel\\": "src/",
