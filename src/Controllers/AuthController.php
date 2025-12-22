@@ -134,12 +134,18 @@ class AuthController {
         }
     }
 
-    public function updateProfile() {
+    public function updateProfile($actor = null) {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
-        // user_id should ideally come from token, but we support input for now as per legacy
-        $userId          = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+        // Get user_id from token (actor) primarily for security
+        $userId = ($actor && isset($actor['user_id'])) ? (int)$actor['user_id'] : 0;
+        
+        // Fallback for legacy support if needed, though index.php now enforces token
+        if ($userId <= 0) {
+            $userId = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+        }
+
         $phone           = trim($data['phone'] ?? '');
         $currentPassword = trim($data['current_password'] ?? '');
         $newPassword     = trim($data['new_password'] ?? '');

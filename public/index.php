@@ -236,9 +236,11 @@ switch ($uri) {
     case '/api/auth/update-profile':
     case '/update_profile.php':
         if ($method === 'POST') {
-            // Optional: AuthMiddleware
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+
             $controller = new AuthController();
-            $controller->updateProfile();
+            $controller->updateProfile($actor);
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);
