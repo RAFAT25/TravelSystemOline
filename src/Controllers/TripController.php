@@ -18,9 +18,9 @@ class TripController {
 
     public function search() {
         header('Content-Type: application/json; charset=utf-8');
-        
+
         $input = file_get_contents('php://input');
-        $data = json_decode($input, true);
+        $data  = json_decode($input, true);
 
         // Support for both POST (JSON) and GET (Query Params)
         $from_stop = $data['from_stop'] ?? ($_GET['from_stop'] ?? '');
@@ -55,7 +55,7 @@ class TripController {
             FROM trips t
             JOIN routes r            ON t.route_id = r.route_id
             JOIN route_stops rs_from ON rs_from.route_id = r.route_id AND rs_from.stop_name = :from_stop
-            JOIN route_stops rs_to   ON rs_to.route_id = r.route_id AND rs_to.stop_name = :to_city
+            JOIN route_stops rs_to   ON rs_to.route_id   = r.route_id AND rs_to.stop_name   = :to_city
             JOIN buses bu            ON t.bus_id = bu.bus_id
             JOIN bus_classes bc      ON bu.bus_class_id = bc.bus_class_id
             JOIN partners p          ON t.partner_id = p.partner_id
@@ -75,6 +75,7 @@ class TripController {
             $trips = [];
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $availableSeats = isset($row['count']) && $row['count'] !== null ? intval($row['count']) : 0;
+
                 $dep = new DateTime($row['departure_time']);
                 $arr = new DateTime($row['arrival_time']);
                 $interval = $dep->diff($arr);
@@ -86,6 +87,15 @@ class TripController {
                     "arrival_time"     => $row['arrival_time'],
                     "origin_city"      => $row['origin_city'],
                     "destination_city" => $row['destination_city'],
+
+                    // من قاعدة البيانات (نقاط المسار الفعلية)
+                    "from_stop"        => $row['from_stop'],
+                    "to_stop"          => $row['to_stop'],
+
+                    // ما اختاره العميل في شاشة البحث
+                    "selected_from"    => $from_stop,
+                    "selected_to"      => $to_city,
+
                     "bus_class"        => $row['bus_class'],
                     "price_adult"      => $row['price_adult'],
                     "price_child"      => $row['price_child'],
@@ -107,7 +117,7 @@ class TripController {
 
     public function getAvailableSeats() {
         header('Content-Type: application/json; charset=utf-8');
-        
+
         $input = file_get_contents('php://input');
         $data  = json_decode($input, true);
 
@@ -125,8 +135,8 @@ class TripController {
                 s.seat_id,
                 s.seat_number
             FROM trips t
-            JOIN buses b   ON b.bus_id = t.bus_id
-            JOIN seats s   ON s.bus_id = b.bus_id
+            JOIN buses b ON b.bus_id = t.bus_id
+            JOIN seats s ON s.bus_id = b.bus_id
             WHERE
                 t.trip_id = :trip_id
                 AND s.seat_id NOT IN (
