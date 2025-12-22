@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Config\Database;
 use Travel\Helpers\Response;
 use Firebase\JWT\JWT;
 use PDO;
