@@ -28,16 +28,20 @@ class AuthController {
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
-        $email = $data['email'] ?? '';
-        $password = $data['password'] ?? '';
+        $identifier = $data['identifier'] ?? $data['email'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
+        $password   = $data['password'] ?? '';
 
-        if (empty($email) || empty($password)) {
-            Response::error("Email and password are required", 400);
+        if (empty($identifier) || empty($password)) {
+            Response::error("Email/Phone and password are required", 400);
             return;
         }
 
-        $stmt = $this->conn->prepare("SELECT user_id, full_name, email, phone_number, password_hash, user_type FROM users WHERE email = :email");
-        $stmt->execute([':email' => $email]);
+        $stmt = $this->conn->prepare("
+            SELECT user_id, full_name, email, phone_number, password_hash, user_type 
+            FROM users 
+            WHERE email = :id OR phone_number = :id
+        ");
+        $stmt->execute([':id' => $identifier]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password_hash'])) {
