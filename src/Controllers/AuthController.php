@@ -4,6 +4,8 @@ namespace Travel\Controllers;
 
 use Travel\Config\Database;
 use Travel\Helpers\Response;
+use Travel\Services\Whapi;
+use Travel\Services\EmailService;
 use Firebase\JWT\JWT;
 use PDO;
 use RuntimeException;
@@ -123,6 +125,22 @@ class AuthController {
 
         if ($success) {
             $userId = $query->fetchColumn();
+
+            // Send Verification Code via WhatsApp
+            try {
+                $msg = "كود التحقق الخاص بك هو: $verificationCode";
+                Whapi::sendText($phone_number, $msg);
+            } catch (\Exception $e) {
+                // Log error but don't fail registration
+            }
+
+            // Send Verification Code via Email
+            try {
+                EmailService::sendVerificationCode($email, $verificationCode, $full_name);
+            } catch (\Exception $e) {
+                // Log error but don't fail registration
+            }
+
             Response::success([
                 "user_id"           => $userId,
                 "user_name"         => $full_name,
@@ -226,10 +244,30 @@ class AuthController {
         $stmt = $this->conn->prepare("UPDATE users SET verification_code = :code, updated_at = NOW() WHERE user_id = :id");
         $stmt->execute([':code' => $resetCode, ':id' => $user['user_id']]);
 
-        // In a real app, send email here. For now, we return it for the user to see (similar to registration).
+        // Send reset code via WhatsApp if phone is available
+        $targetPhone = $user['phone_number'] ?? '';
+        if ($targetPhone) {
+            try {
+                $msg = "كود إعادة تعيين كلمة المرور الخاص بك هو: $resetCode. لا تشارك هذا الكود مع أحد.";
+                Whapi::sendText($targetPhone, $msg);
+            } catch (\Exception $e) {
+                // Log and maybe handle error
+            }
+        }
+
+        // Send reset code via Email if available
+        $targetEmail = $user['email'] ?? '';
+        if ($targetEmail) {
+            try {
+                EmailService::sendVerificationCode($targetEmail, $resetCode, $user['full_name'] ?? 'User');
+            } catch (\Exception $e) {
+                // Log and maybe handle error
+            }
+        }
+
         Response::success([
             "reset_code" => $resetCode
-        ], "Reset code sent to your email");
+        ], "Reset code sent to your phone/email");
     }
 
     public function verifyResetCode() {

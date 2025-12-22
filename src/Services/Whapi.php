@@ -37,7 +37,6 @@ class Whapi
         $json = (string) $res->getBody();
         return json_decode($json, true) ?: ["raw" => $json];
     }
-    }
 
     private static function formatPhoneNumber(string $phone): string
     {
