@@ -43,8 +43,8 @@ class TripController {
                 (t.base_price - 50) AS price_child,
                 r.origin_city,
                 r.destination_city,
-                rs_from.stop_name AS from_stop,
-                rs_to.stop_name   AS to_stop,
+                rs_from.stop_name AS route_from_stop,
+                rs_to.stop_name   AS route_to_stop,
                 bu.model,
                 bc.class_name     AS bus_class,
                 p.company_name,
@@ -85,16 +85,21 @@ class TripController {
                     "trip_id"          => $row['trip_id'],
                     "departure_time"   => $row['departure_time'],
                     "arrival_time"     => $row['arrival_time'],
+
                     "origin_city"      => $row['origin_city'],
                     "destination_city" => $row['destination_city'],
 
-                    // من قاعدة البيانات (نقاط المسار الفعلية)
-                    "from_stop"        => $row['from_stop'],
-                    "to_stop"          => $row['to_stop'],
+                    // هذه الحقول كما تريدها أنت: ما اختاره العميل فعلياً
+                    "from_stop"        => $from_stop,  // نقطة الصعود التي اختارها العميل
+                    "to_stop"          => $to_city,    // نقطة النزول النهائية التي اختارها العميل
 
-                    // ما اختاره العميل في شاشة البحث
+                    // تبقي نفس الأسماء القديمة في الاستقبال
                     "selected_from"    => $from_stop,
                     "selected_to"      => $to_city,
+
+                    // إن احتجت النقاط الفعلية من المسار مستقبلاً
+                    "route_from_stop"  => $row['route_from_stop'],
+                    "route_to_stop"    => $row['route_to_stop'],
 
                     "bus_class"        => $row['bus_class'],
                     "price_adult"      => $row['price_adult'],
