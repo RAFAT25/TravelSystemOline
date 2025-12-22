@@ -205,6 +205,19 @@ switch ($uri) {
         }
         break;
 
+    case '/api/bookings/submit-payment-proof':
+        if ($method === 'POST') {
+            $middleware = new AuthMiddleware();
+            $actor = $middleware->validateToken();
+            
+            $controller = new \Travel\Controllers\BookingController();
+            $controller->submitPaymentProof($actor);
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
     case '/api/support/faqs/list':
     case '/faqs_categories.php':
         if ($method === 'GET' || $method === 'POST') {
@@ -235,6 +248,26 @@ switch ($uri) {
              // Allowing GET/POST as per original script usage might be needed, assuming POST based on typical API
             $controller = new TripController();
             $controller->searchArabic();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/webhooks/stripe':
+        if ($method === 'POST') {
+            $controller = new \Travel\Controllers\StripeController();
+            $controller->handleWebhook();
+        } else {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+        }
+        break;
+
+    case '/api/payment/stripe/create-session':
+        if ($method === 'POST') {
+            $controller = new \Travel\Controllers\StripeController();
+            $controller->createSession();
         } else {
             http_response_code(405);
             echo json_encode(["error" => "Method not allowed"]);

@@ -48,10 +48,10 @@ CREATE TABLE IF NOT EXISTS refund_transactions (
 );
 
 -- Indexes للأداء
-CREATE INDEX idx_refund_transactions_booking ON refund_transactions(booking_id);
-CREATE INDEX idx_refund_transactions_status ON refund_transactions(refund_status);
-CREATE INDEX idx_refund_transactions_created ON refund_transactions(created_at);
-CREATE INDEX idx_refund_transactions_initiated_by ON refund_transactions(initiated_by);
+CREATE INDEX IF NOT EXISTS idx_refund_transactions_booking ON refund_transactions(booking_id);
+CREATE INDEX IF NOT EXISTS idx_refund_transactions_status ON refund_transactions(refund_status);
+CREATE INDEX IF NOT EXISTS idx_refund_transactions_created ON refund_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_refund_transactions_initiated_by ON refund_transactions(initiated_by);
 
 -- ============================================
 -- 2. Trigger لإنشاء سجل استرداد تلقائياً
@@ -64,6 +64,12 @@ CREATE OR REPLACE FUNCTION create_refund_transaction()
 RETURNS TRIGGER AS $$
 DECLARE
     v_refund_exists BOOLEAN;
+    v_cancel_policy_id BIGINT;
+    v_departure_time TIMESTAMP;
+    v_hours_before INT;
+    v_refund_percentage NUMERIC;
+    v_refund_fee NUMERIC;
+    v_net_refund NUMERIC;
 BEGIN
     -- عند تغيير الحالة إلى Refunded
     IF NEW.payment_status = 'Refunded' AND (OLD.payment_status IS NULL OR OLD.payment_status != 'Refunded') THEN
@@ -74,13 +80,42 @@ BEGIN
         ) INTO v_refund_exists;
         
         IF NOT v_refund_exists THEN
-            -- إنشاء سجل استرداد جديد
+            
+            -- جلب معلومات سياسة الإلغاء والرحلة
+            SELECT b.cancel_policy_id, t.departure_time
+            INTO v_cancel_policy_id, v_departure_time
+            FROM bookings b
+            JOIN trips t ON t.trip_id = b.trip_id
+            WHERE b.booking_id = NEW.booking_id;
+            
+            -- حساب الساعات المتبقية قبل الرحلة
+            v_hours_before := EXTRACT(EPOCH FROM (v_departure_time - CURRENT_TIMESTAMP)) / 3600;
+            
+            -- جلب نسبة الاسترداد من سياسة الإلغاء
+            SELECT refund_percentage INTO v_refund_percentage
+            FROM cancel_policy_rules
+            WHERE cancel_policy_id = v_cancel_policy_id
+              AND hours_before_departure <= v_hours_before
+            ORDER BY hours_before_departure DESC
+            LIMIT 1;
+            
+            -- إذا لم توجد سياسة، استرداد كامل (100%)
+            IF v_refund_percentage IS NULL THEN
+                v_refund_percentage := 100;
+            END IF;
+            
+            -- حساب رسوم الإلغاء والمبلغ الصافي
+            v_refund_fee := NEW.total_price * ((100 - v_refund_percentage) / 100);
+            v_net_refund := NEW.total_price - v_refund_fee;
+            
+            -- إنشاء سجل استرداد جديد مع الرسوم
             INSERT INTO refund_transactions (
                 booking_id,
                 original_payment_method,
                 original_transaction_id,
                 refund_method,
                 refund_amount,
+                refund_fee,
                 net_refund,
                 refund_status,
                 customer_notes
@@ -88,11 +123,17 @@ BEGIN
                 NEW.booking_id,
                 NEW.payment_method,
                 NEW.gateway_transaction_id,
-                'Pending', -- سيتم تحديده لاحقاً
-                NEW.total_price,
-                NEW.total_price, -- افتراضياً بدون رسوم
                 'Pending',
-                'تم قبول طلب الاسترداد. سيتم التواصل معك لتحديد طريقة الإرجاع.'
+                NEW.total_price,
+                v_refund_fee,
+                v_net_refund,
+                'Pending',
+                CASE 
+                    WHEN v_refund_fee > 0 THEN
+                        CONCAT('تم قبول طلب الاسترداد. رسوم الإلغاء: ', v_refund_fee, ' ريال. المبلغ المسترد: ', v_net_refund, ' ريال.')
+                    ELSE
+                        'تم قبول طلب الاسترداد. سيتم استرداد المبلغ كاملاً.'
+                END
             );
         END IF;
     END IF;

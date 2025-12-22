@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Config\Database;
 use PDO;
 use Exception;
@@ -28,10 +29,7 @@ class CommissionController {
         $to = isset($_GET['to']) ? trim($_GET['to']) : '';
 
         if ($partner_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "partner_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("partner_id is required", 400);
             return;
         }
 
@@ -64,19 +62,15 @@ class CommissionController {
             $total_commission = array_sum(array_column($commissions, 'commission_amount'));
             $total_revenue = array_sum(array_column($commissions, 'partner_revenue'));
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "count" => count($commissions),
                 "total_commission" => $total_commission,
                 "total_partner_revenue" => $total_revenue,
                 "commissions" => $commissions
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -99,26 +93,19 @@ class CommissionController {
             $summary = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$summary) {
-                echo json_encode([
-                    "success" => true,
+                Response::success([
                     "date" => $date,
                     "total_bookings" => 0,
                     "total_revenue" => 0,
                     "total_commission" => 0
-                ], JSON_UNESCAPED_UNICODE);
+                ]);
                 return;
             }
 
-            echo json_encode([
-                "success" => true,
-                "summary" => $summary
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success(["summary" => $summary]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -132,10 +119,7 @@ class CommissionController {
         $booking_id = isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0;
 
         if ($booking_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "booking_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("booking_id is required", 400);
             return;
         }
 
@@ -148,23 +132,14 @@ class CommissionController {
             $commission = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$commission) {
-                echo json_encode([
-                    "success" => false,
-                    "error" => "Commission not found for this booking"
-                ], JSON_UNESCAPED_UNICODE);
+                Response::notFound("Commission not found for this booking");
                 return;
             }
 
-            echo json_encode([
-                "success" => true,
-                "commission" => $commission
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success(["commission" => $commission]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -186,10 +161,7 @@ class CommissionController {
         $notes = isset($data['notes']) ? trim($data['notes']) : '';
 
         if (empty($commission_ids)) {
-            echo json_encode([
-                "success" => false,
-                "error" => "commission_ids array is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("commission_ids array is required", 400);
             return;
         }
 
@@ -214,20 +186,15 @@ class CommissionController {
 
             $this->conn->commit();
 
-            echo json_encode([
-                "success" => true,
-                "updated_count" => $updated_count,
-                "message" => "تم تحديث حالة العمولات بنجاح"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success([
+                "updated_count" => $updated_count
+            ], "تم تحديث حالة العمولات بنجاح");
 
         } catch (Exception $e) {
             if ($this->conn->inTransaction()) {
                 $this->conn->rollBack();
             }
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -244,10 +211,7 @@ class CommissionController {
         $year = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
 
         if ($partner_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "partner_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("partner_id is required", 400);
             return;
         }
 
@@ -276,18 +240,14 @@ class CommissionController {
             
             $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "partner_id" => $partner_id,
                 "period" => "$year-$month",
                 "stats" => $stats
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -306,10 +266,7 @@ class CommissionController {
         $new_amount = isset($data['new_amount']) ? (float)$data['new_amount'] : 0;
 
         if ($booking_id <= 0 || $new_amount <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "booking_id and new_amount are required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("booking_id and new_amount are required", 400);
             return;
         }
 
@@ -323,13 +280,10 @@ class CommissionController {
             $result = $stmt->fetchColumn();
             $result_data = json_decode($result, true);
 
-            echo json_encode($result_data, JSON_UNESCAPED_UNICODE);
+            Response::send(json_decode($result, true));
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -348,17 +302,13 @@ class CommissionController {
             $stmt->execute();
             $refunds = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "count" => count($refunds),
                 "refunds" => $refunds
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 }

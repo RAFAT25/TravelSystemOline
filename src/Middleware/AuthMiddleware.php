@@ -4,18 +4,20 @@ namespace Travel\Middleware;
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use Travel\Helpers\Response;
 use Exception;
+use RuntimeException;
 
 class AuthMiddleware {
     private $secret_key;
 
     public function __construct() {
-        // JWT Secret - يستخدم متغير البيئة أو قيمة افتراضية
+        // JWT Secret - Uses environment variable only
         $this->secret_key = getenv('JWT_SECRET');
         
         if (empty($this->secret_key)) {
-            // قيمة افتراضية آمنة للتطوير والإنتاج
-            $this->secret_key = 'WQ3KUIBxd7gGsyNE6PDf5wZRctuMoShqFmXrAvenlCVkp1zJ9H2j4YTa8iLb0O';
+            // CRITICAL: Block operation if secret is missing to prevent insecure defaults
+            throw new RuntimeException("CRITICAL: JWT_SECRET environment variable is missing.");
         }
     }
 
@@ -63,11 +65,6 @@ class AuthMiddleware {
     }
 
     private function sendError($message) {
-        http_response_code(401);
-        echo json_encode([
-            "success" => false,
-            "error" => $message
-        ], JSON_UNESCAPED_UNICODE);
-        exit();
+        Response::unauthorized($message);
     }
 }

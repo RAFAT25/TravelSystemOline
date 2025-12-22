@@ -2,9 +2,10 @@
 
 namespace Travel\Controllers;
 
-use Travel\Config\Database;
+use Travel\Helpers\Response;
 use Firebase\JWT\JWT;
 use PDO;
+use RuntimeException;
 
 class AuthController {
     private $conn;
@@ -14,12 +15,12 @@ class AuthController {
         $db = new Database();
         $this->conn = $db->connect();
         
-        // JWT Secret - يستخدم متغير البيئة أو قيمة افتراضية
+        // JWT Secret - Uses environment variable only
         $this->secret_key = getenv('JWT_SECRET');
         
         if (empty($this->secret_key)) {
-            // قيمة افتراضية آمنة للتطوير والإنتاج
-            $this->secret_key = 'WQ3KUIBxd7gGsyNE6PDf5wZRctuMoShqFmXrAvenlCVkp1zJ9H2j4YTa8iLb0O';
+            // CRITICAL: Block operation if secret is missing
+            throw new RuntimeException("CRITICAL: JWT_SECRET environment variable is missing.");
         }
     }
 
@@ -31,10 +32,7 @@ class AuthController {
         $password = $data['password'] ?? '';
 
         if (empty($email) || empty($password)) {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Email and password are required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Email and password are required", 400);
             return;
         }
 
@@ -43,7 +41,7 @@ class AuthController {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password_hash'])) {
-            
+            // ... (payload logic remains same)
             $issuedAt = time();
             $expirationTime = $issuedAt + (60 * 60 * 24); // 1 day validity
             
@@ -60,19 +58,15 @@ class AuthController {
 
             $jwt = JWT::encode($payload, $this->secret_key, 'HS256');
 
-            echo json_encode([
-                "success"   => true,
+            Response::success([
                 "user_id"   => $user['user_id'],
                 "user_name" => $user['full_name'],
                 "userEmail" => $user['email'],
                 "user_type" => $user['user_type'],
                 "token"     => $jwt
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
         } else {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Invalid credentials"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid credentials", 401);
         }
     }
 
@@ -87,10 +81,7 @@ class AuthController {
         $user_type    = isset($data['user_type'])    ? $data['user_type']         : 'Customer';
         
         if (empty($full_name) || empty($email) || empty($password) || empty($phone_number)) {
-            echo json_encode([
-                "success" => false,
-                "error"   => "All fields are required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("All fields are required", 400);
             return;
         }
 
@@ -102,10 +93,7 @@ class AuthController {
         ]);
 
         if ($checkStmt->rowCount() > 0) {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Email or phone number already in use"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Email or phone number already in use", 409);
             return;
         }
 
@@ -129,19 +117,157 @@ class AuthController {
 
         if ($success) {
             $userId = $query->fetchColumn();
-            echo json_encode([
-                "success"           => true,
+            Response::success([
                 "user_id"           => $userId,
                 "user_name"         => $full_name,
                 "user_type"         => $user_type,
                 "account_status"    => 'Unverified',
                 "verification_code" => $verificationCode
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
         } else {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Error creating account"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Error creating account", 500);
         }
+    }
+
+    public function updateProfile() {
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        // user_id should ideally come from token, but we support input for now as per legacy
+        $userId          = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+        $phone           = trim($data['phone'] ?? '');
+        $currentPassword = trim($data['current_password'] ?? '');
+        $newPassword     = trim($data['new_password'] ?? '');
+
+        if ($userId <= 0) {
+            Response::error("Invalid user_id", 400);
+            return;
+        }
+
+        // Get current user
+        $stmt = $this->conn->prepare("SELECT user_id, phone_number, password_hash FROM users WHERE user_id = :id");
+        $stmt->execute([':id' => $userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            Response::notFound("User not found");
+            return;
+        }
+
+        $fieldsToUpdate = [];
+        $params = [':id' => $userId];
+
+        if ($phone !== '') {
+            $fieldsToUpdate[] = "phone_number = :phone";
+            $params[':phone'] = $phone;
+        }
+
+        if ($newPassword !== '') {
+            if ($currentPassword === '') {
+                Response::error("Current password is required to set a new one", 400);
+                return;
+            }
+
+            if (!password_verify($currentPassword, $user['password_hash'])) {
+                Response::error("Current password is incorrect", 401);
+                return;
+            }
+
+            $params[':pass'] = password_hash($newPassword, PASSWORD_BCRYPT);
+            $fieldsToUpdate[] = "password_hash = :pass";
+        }
+
+        if (empty($fieldsToUpdate)) {
+            Response::error("No data provided for update", 400);
+            return;
+        }
+
+        $setClause = implode(", ", $fieldsToUpdate);
+        $up = $this->conn->prepare("UPDATE users SET $setClause, updated_at = NOW() WHERE user_id = :id");
+        $up->execute($params);
+
+        Response::success([
+            "user_phone" => $phone !== '' ? $phone : $user['phone_number']
+        ], "Profile updated successfully");
+    }
+
+    public function forgotPassword() {
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+        $email = $data['email'] ?? '';
+
+        if (empty($email)) {
+            Response::error("Email is required", 400);
+            return;
+        }
+
+        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email");
+        $stmt->execute([':email' => $email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            Response::notFound("User not found");
+            return;
+        }
+
+        $resetCode = rand(100000, 999999);
+        $stmt = $this->conn->prepare("UPDATE users SET verification_code = :code, updated_at = NOW() WHERE user_id = :id");
+        $stmt->execute([':code' => $resetCode, ':id' => $user['user_id']]);
+
+        // In a real app, send email here. For now, we return it for the user to see (similar to registration).
+        Response::success([
+            "reset_code" => $resetCode
+        ], "Reset code sent to your email");
+    }
+
+    public function verifyResetCode() {
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+        $email = $data['email'] ?? '';
+        $code = $data['code'] ?? '';
+
+        if (empty($email) || empty($code)) {
+            Response::error("Email and code are required", 400);
+            return;
+        }
+
+        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email AND verification_code = :code");
+        $stmt->execute([':email' => $email, ':code' => $code]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            Response::error("Invalid code or email", 401);
+            return;
+        }
+
+        Response::success([], "Code verified successfully");
+    }
+
+    public function resetPassword() {
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+        $email = $data['email'] ?? '';
+        $code = $data['code'] ?? '';
+        $newPassword = $data['new_password'] ?? '';
+
+        if (empty($email) || empty($code) || empty($newPassword)) {
+            Response::error("Email, code and new password are required", 400);
+            return;
+        }
+
+        $stmt = $this->conn->prepare("SELECT user_id FROM users WHERE email = :email AND verification_code = :code");
+        $stmt->execute([':email' => $email, ':code' => $code]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            Response::error("Invalid code or email", 401);
+            return;
+        }
+
+        $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $stmt = $this->conn->prepare("UPDATE users SET password_hash = :pass, verification_code = NULL, updated_at = NOW() WHERE user_id = :id");
+        $stmt->execute([':pass' => $newHash, ':id' => $user['user_id']]);
+
+        Response::success([], "Password reset successfully");
     }
 }

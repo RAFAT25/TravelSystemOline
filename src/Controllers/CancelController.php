@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Config\Database;
 use PDO;
 use Exception;
@@ -25,7 +26,7 @@ class CancelController {
         $booking_id = isset($data['booking_id']) ? (int)$data['booking_id'] : (isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0);
 
         if ($booking_id <= 0) {
-            echo json_encode(["success" => false, "error" => "Invalid booking_id"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid booking_id", 400);
             return;
         }
 
@@ -51,12 +52,12 @@ class CancelController {
             $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$booking) {
-                echo json_encode(["success" => false, "error" => "Booking not found"], JSON_UNESCAPED_UNICODE);
+                Response::notFound("Booking not found");
                 return;
             }
 
             if ($booking['booking_status'] === 'Cancelled') {
-                echo json_encode(["success" => false, "error" => "Booking already cancelled"], JSON_UNESCAPED_UNICODE);
+                Response::error("Booking already cancelled", 409);
                 return;
             }
 
@@ -107,11 +108,9 @@ class CancelController {
                 $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
     
                 if (!$rule) {
-                    echo json_encode([
-                        "success" => false,
-                        "error"   => "No matching cancel rule for this time window",
+                    Response::error("No matching cancel rule for this time window", 422, [
                         "hours_before_departure" => $hours_before_departure
-                    ], JSON_UNESCAPED_UNICODE);
+                    ]);
                     return;
                 }
     
@@ -124,8 +123,7 @@ class CancelController {
                 }
             }
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "booking_id" => $booking_id,
                 "trip_id"    => (int)$booking['trip_id'],
                 "total_price" => $total_price,
@@ -141,10 +139,10 @@ class CancelController {
                     "refund_amount"      => $refund_amount,
                     "non_refundable_part"=> max(0, $total_price - $refund_amount)
                 ]
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -159,7 +157,7 @@ class CancelController {
         $reason     = isset($data['reason']) ? trim($data['reason']) : '';
 
         if ($booking_id <= 0) {
-            echo json_encode(["success" => false, "error" => "Invalid booking_id"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid booking_id", 400);
             return;
         }
 
@@ -254,16 +252,20 @@ class CancelController {
             }
 
             // 4) تحديث حالة الحجز + الركاب + المقاعد
+            $newPaymentStatus = ($payment_status === 'Paid' || $payment_status === 'Partial') ? 'Refunded' : $payment_status;
+
             $stmtUpdateBooking = $this->conn->prepare("
                 UPDATE bookings
                 SET booking_status = 'Cancelled',
+                    payment_status = :pstatus,
                     cancel_reason  = :reason,
                     cancel_timestamp = CURRENT_TIMESTAMP
                 WHERE booking_id = :bid
             ");
             $stmtUpdateBooking->execute([
-                ':reason' => $reason,
-                ':bid'    => $booking_id
+                ':pstatus' => $newPaymentStatus,
+                ':reason'  => $reason,
+                ':bid'     => $booking_id
             ]);
 
             // تحديث الركاب
@@ -310,21 +312,20 @@ class CancelController {
 
             $this->conn->commit();
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "booking_id" => $booking_id,
                 "trip_id"    => $trip_id,
                 "total_price" => $total_price,
                 "refund_amount" => $refund_amount,
                 "refund_percentage" => $refund_percentage,
                 "cancellation_fee"  => $cancellation_fee
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
             if ($this->conn->inTransaction()) {
                 $this->conn->rollBack();
             }
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 }

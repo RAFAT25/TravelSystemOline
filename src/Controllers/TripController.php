@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Config\Database;
 use PDO;
 use DateTime;
@@ -28,7 +29,7 @@ class TripController {
         $bus_class = $data['bus_class'] ?? ($_GET['bus_class'] ?? '');
 
         if (empty($from_stop) || empty($to_city) || empty($date) || empty($bus_class)) {
-            echo json_encode(["success" => false, "error" => "All fields are required"], JSON_UNESCAPED_UNICODE);
+            Response::error("All fields are required", 400);
             return;
         }
 
@@ -95,12 +96,12 @@ class TripController {
             }
 
             if (!empty($trips)) {
-                echo json_encode(["success" => true, "trips" => $trips], JSON_UNESCAPED_UNICODE);
+                Response::success(["trips" => $trips]);
             } else {
-                echo json_encode(["success" => false, "error" => "No matching trips found"], JSON_UNESCAPED_UNICODE);
+                Response::error("No matching trips found", 404);
             }
         } catch (Exception $e) {
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -114,7 +115,7 @@ class TripController {
         $trip_id = isset($data['trip_id']) ? (int)$data['trip_id'] : (isset($_GET['trip_id']) ? (int)$_GET['trip_id'] : 0);
 
         if ($trip_id <= 0) {
-            echo json_encode(["success" => false, "error" => "trip_id is required"], JSON_UNESCAPED_UNICODE);
+            Response::error("trip_id is required", 400);
             return;
         }
 
@@ -141,9 +142,9 @@ class TripController {
             $stmt->execute([':trip_id' => $trip_id]);
             $seats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode(["success" => true, "seats" => $seats ?: []], JSON_UNESCAPED_UNICODE);
+            Response::success(["seats" => $seats ?: []]);
         } catch (Exception $e) {
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 }

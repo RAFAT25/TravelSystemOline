@@ -3,7 +3,7 @@
 namespace Travel\Controllers;
 
 use Travel\Config\Database;
-
+use Travel\Helpers\Response;
 use Travel\Services\Whapi;
 use Travel\Services\FcmService;
 use PDO;
@@ -31,10 +31,7 @@ class BookingController {
     $passengers     = (isset($data['passengers']) && is_array($data['passengers'])) ? $data['passengers'] : [];
 
     if ($user_id <= 0 || $trip_id <= 0 || empty($passengers)) {
-        echo json_encode([
-            "success" => false,
-            "error"   => "Missing required fields: user_id, trip_id, passengers",
-        ], JSON_UNESCAPED_UNICODE);
+        Response::error("Missing required fields: user_id, trip_id, passengers", 400);
         return;
     }
 
@@ -168,13 +165,12 @@ class BookingController {
 
         $this->conn->commit();
 
-        echo json_encode([
-            "success"      => true,
+        Response::success([
             "booking_id"   => $booking_id,
             "trip_id"      => $trip_id,
             "total_price"  => $total_price,
             "cancel_policy_id" => $cancel_policy_id
-        ], JSON_UNESCAPED_UNICODE);
+        ]);
 
         // --- Centralized Notifications ---
         $this->sendBookingNotifications($user_id, $booking_id, 'Unpaid', $total_price, $userPhone, $userName);
@@ -185,10 +181,7 @@ class BookingController {
         if ($this->conn->inTransaction()) {
             $this->conn->rollBack();
         }
-        echo json_encode([
-            "success" => false,
-            "error"   => $e->getMessage()
-        ], JSON_UNESCAPED_UNICODE);
+        Response::error($e->getMessage(), 500);
     }
 }
 
@@ -205,22 +198,19 @@ class BookingController {
         $transaction_id = isset($data['transaction_id']) ? trim($data['transaction_id']) : '';
 
         if ($booking_id <= 0 || $payment_status === '') {
-            echo json_encode([
-                "success" => false,
-                "error"   => "booking_id and payment_status are required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("booking_id and payment_status are required", 400);
             return;
         }
 
         $allowedStatus = ['Unpaid', 'Paid', 'Refunded'];
         if (!in_array($payment_status, $allowedStatus, true)) {
-            echo json_encode(["success" => false, "error" => "Invalid payment_status"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid payment_status", 400);
             return;
         }
 
-        $allowedMethods = ['Electronic', 'Cash', 'Kareemi'];
+        $allowedMethods = ['Electronic', 'Cash', 'Kareemi', 'Transfer'];
         if ($payment_method !== '' && !in_array($payment_method, $allowedMethods, true)) {
-            echo json_encode(["success" => false, "error" => "Invalid payment_method"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid payment_method", 400);
             return;
         }
 
@@ -269,12 +259,12 @@ class BookingController {
                      $this->sendBookingNotifications($uId, $booking_id, $payment_status, $tPrice, $uPhone, $uName);
                  }
 
-                echo json_encode(["success" => true, "booking_id" => $booking_id], JSON_UNESCAPED_UNICODE);
+                Response::success(["booking_id" => $booking_id]);
             } else {
-                echo json_encode(["success" => false, "error" => "Booking not found or no change made"], JSON_UNESCAPED_UNICODE);
+                Response::error("Booking not found or no change made", 404);
             }
         } catch (Exception $e) {
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -293,10 +283,7 @@ class BookingController {
         }
 
         if ($userId <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Invalid User ID"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid User ID", 400);
             return;
         }
 
@@ -330,17 +317,13 @@ class BookingController {
             $stmt->execute([':user_id' => $userId]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                "success"  => true,
+            Response::success([
                 "count"    => count($rows),
                 "bookings" => $rows
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error"   => "Server Error: " . $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Server Error: " . $e->getMessage(), 500);
     }
 }
 
@@ -350,8 +333,7 @@ class BookingController {
         // 1. Authentication (Required for Audit Trail)
         // Token validation is now done at the routing level
         if (!$actor || !isset($actor['user_id'])) {
-             http_response_code(401);
-             echo json_encode(["success" => false, "error" => "Invalid Token Payload: Missing user_id"], JSON_UNESCAPED_UNICODE);
+             Response::unauthorized("Invalid Token Payload: Missing user_id");
              return;
         }
 
@@ -365,13 +347,13 @@ class BookingController {
         $notes               = isset($data['notes']) ? trim($data['notes']) : '';
 
         if ($booking_id <= 0) {
-            echo json_encode(["success" => false, "error" => "Invalid booking_id"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid booking_id", 400);
             return;
         }
 
         $allowedPayment = ['Unpaid', 'Paid', 'Refunded'];
         if ($force_payment_status !== '' && !in_array($force_payment_status, $allowedPayment, true)) {
-            echo json_encode(["success" => false, "error" => "Invalid payment_status"], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid payment_status", 400);
             return;
         }
 
@@ -444,18 +426,17 @@ class BookingController {
                 $booking['full_name']
             );
 
-            echo json_encode([
-                "success"        => true,
+            Response::success([
                 "booking_id"     => $booking_id,
                 "booking_status" => "Confirmed",
                 "payment_status" => $newPaymentStatus
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
             if ($this->conn->inTransaction()) {
                 $this->conn->rollBack();
             }
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -513,4 +494,73 @@ class BookingController {
             }
         } catch (\Throwable $e) { /* Ignore */ }
     }
+
+    /**
+     * Submit payment proof (Transaction ID / Reference)
+     * POST /api/bookings/submit-payment-proof
+     */
+    public function submitPaymentProof($actor) {
+        header('Content-Type: application/json; charset=utf-8');
+        
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        $booking_id = isset($data['booking_id']) ? (int)$data['booking_id'] : 0;
+        $transaction_id = isset($data['transaction_id']) ? trim($data['transaction_id']) : '';
+        $payment_method = isset($data['payment_method']) ? trim($data['payment_method']) : '';
+        $note = isset($data['note']) ? trim($data['note']) : '';
+
+        if ($booking_id <= 0 || empty($transaction_id)) {
+            Response::error("booking_id and transaction_id are required", 400);
+            return;
+        }
+
+        try {
+            // Verify booking belongs to user
+            $stmt = $this->conn->prepare("SELECT user_id, payment_status FROM bookings WHERE booking_id = :bid");
+            $stmt->execute([':bid' => $booking_id]);
+            $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$booking) {
+                Response::notFound("Booking not found");
+                return;
+            }
+
+            // Security check: Only customer who owns it can submit (or Admin/Employee)
+            if ($booking['user_id'] != $actor['user_id'] && !in_array($actor['user_type'], ['Employee', 'Admin'])) {
+                Response::unauthorized("Access denied");
+                return;
+            }
+
+            if ($booking['payment_status'] === 'Paid') {
+                Response::error("Booking is already marked as Paid", 409);
+                return;
+            }
+
+            // Update booking with transaction ID and Method
+            $stmtUpdate = $this->conn->prepare("
+                UPDATE bookings 
+                SET gateway_transaction_id = :tid,
+                    payment_method = CASE 
+                                        WHEN :method != '' THEN :method::payment_method_enum 
+                                        ELSE payment_method 
+                                     END,
+                    notes = :note
+                WHERE booking_id = :bid
+            ");
+            $stmtUpdate->execute([
+                ':tid' => $transaction_id,
+                ':method' => $payment_method,
+                ':note' => $note ?: "Submitted by customer",
+                ':bid' => $booking_id
+            ]);
+
+            Response::success([], "تم إرسال إثبات الدفع بنجاح. سيتم مراجعته من قبل الموظف.");
+
+        } catch (Exception $e) {
+            Response::error($e->getMessage(), 500);
+        }
+    }
 }
+
+

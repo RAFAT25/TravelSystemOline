@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Config\Database;
 use PDO;
 use Exception;
@@ -25,8 +26,7 @@ class SupportController {
         $description= $input['description']?? null;
 
         if (!$user_id || !$issue_type || !$title || !$description) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+            Response::error("Missing required fields", 400);
             return;
         }
 
@@ -46,15 +46,10 @@ class SupportController {
 
             $ticket = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                'success' => true,
-                'message' => 'Ticket created successfully',
-                'data'    => $ticket,
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success(['data' => $ticket], "Ticket created successfully");
 
         } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+            Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }
 
@@ -73,14 +68,10 @@ class SupportController {
             $stmt = $this->conn->query($sql);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                'success' => true,
-                'data' => $rows
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success(['data' => $rows]);
 
         } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }
     public function getFaqList() {
@@ -101,17 +92,10 @@ class SupportController {
         $stmt = $this->conn->query($sql);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        echo json_encode([
-            'success' => true,
-            'data'    => $rows
-        ], JSON_UNESCAPED_UNICODE);
+        Response::success(['data' => $rows]);
 
     } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error'   => 'Server error: ' . $e->getMessage()
-        ], JSON_UNESCAPED_UNICODE);
+        Response::error('Server error: ' . $e->getMessage(), 500);
     }
 }
 

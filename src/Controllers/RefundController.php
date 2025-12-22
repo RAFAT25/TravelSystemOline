@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Config\Database;
 use PDO;
 use Exception;
@@ -39,19 +40,13 @@ class RefundController {
         $notes = isset($data['notes']) ? trim($data['notes']) : '';
 
         if ($refund_id <= 0 || $refund_method === '') {
-            echo json_encode([
-                "success" => false,
-                "error" => "refund_id and refund_method are required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("refund_id and refund_method are required", 400);
             return;
         }
 
         $allowed_methods = ['Bank Transfer', 'Kareemi', 'Cash', 'Same as Original'];
         if (!in_array($refund_method, $allowed_methods)) {
-            echo json_encode([
-                "success" => false,
-                "error" => "Invalid refund_method. Allowed: " . implode(', ', $allowed_methods)
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("Invalid refund_method. Allowed: " . implode(', ', $allowed_methods), 400);
             return;
         }
 
@@ -93,21 +88,16 @@ class RefundController {
 
             $this->conn->commit();
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "refund_id" => $refund_id,
-                "status" => "Processing",
-                "message" => "تم بدء معالجة الاسترداد بنجاح"
-            ], JSON_UNESCAPED_UNICODE);
+                "status" => "Processing"
+            ], "تم بدء معالجة الاسترداد بنجاح");
 
         } catch (Exception $e) {
             if ($this->conn->inTransaction()) {
                 $this->conn->rollBack();
             }
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -127,10 +117,7 @@ class RefundController {
         $notes = isset($data['notes']) ? trim($data['notes']) : '';
 
         if ($refund_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "refund_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("refund_id is required", 400);
             return;
         }
 
@@ -160,25 +147,17 @@ class RefundController {
             ]);
 
             if ($stmt->rowCount() === 0) {
-                echo json_encode([
-                    "success" => false,
-                    "error" => "Refund not found or not in Processing status"
-                ], JSON_UNESCAPED_UNICODE);
+                Response::error("Refund not found or not in Processing status", 404);
                 return;
             }
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "refund_id" => $refund_id,
-                "status" => "Completed",
-                "message" => "تم إكمال عملية الاسترداد بنجاح"
-            ], JSON_UNESCAPED_UNICODE);
+                "status" => "Completed"
+            ], "تم إكمال عملية الاسترداد بنجاح");
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -219,17 +198,13 @@ class RefundController {
             $stmt->execute($params);
             $refunds = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "count" => count($refunds),
                 "refunds" => $refunds
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -243,10 +218,7 @@ class RefundController {
         $booking_id = isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0;
 
         if ($booking_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "booking_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("booking_id is required", 400);
             return;
         }
 
@@ -259,23 +231,14 @@ class RefundController {
             $refund = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$refund) {
-                echo json_encode([
-                    "success" => false,
-                    "error" => "Refund not found for this booking"
-                ], JSON_UNESCAPED_UNICODE);
+                Response::notFound("Refund not found for this booking");
                 return;
             }
 
-            echo json_encode([
-                "success" => true,
-                "refund" => $refund
-            ], JSON_UNESCAPED_UNICODE);
+            Response::success(["refund" => $refund]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -289,10 +252,7 @@ class RefundController {
         $booking_id = isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0;
 
         if ($booking_id <= 0) {
-            echo json_encode([
-                "success" => false,
-                "error" => "booking_id is required"
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error("booking_id is required", 400);
             return;
         }
 
@@ -308,19 +268,16 @@ class RefundController {
 
             $net_refund = $total_price - $fee;
 
-            echo json_encode([
-                "success" => true,
+            Response::success([
                 "booking_id" => $booking_id,
                 "total_price" => $total_price,
                 "refund_fee" => $fee,
                 "net_refund" => $net_refund
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
 
         } catch (Exception $e) {
-            echo json_encode([
-                "success" => false,
-                "error" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 }
+

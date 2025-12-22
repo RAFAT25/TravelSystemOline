@@ -2,6 +2,7 @@
 
 namespace Travel\Controllers;
 
+use Travel\Helpers\Response;
 use Travel\Services\FcmService;
 use Travel\Services\Whapi;
 
@@ -16,17 +17,15 @@ class NotificationController {
         $body = $data['body'] ?? 'This is a test message from your PHP Backend';
 
         if (empty($token)) {
-            echo json_encode([
-                "success" => false,
-                "error" => "fcm_token is required"
-            ]);
+            Response::error("fcm_token is required", 400);
             return;
         }
 
         $fcm = new FcmService();
         $result = $fcm->sendNotification($token, $title, $body);
 
-        echo json_encode($result);
+        Response::send($result);
+    }
     public function send() {
         header('Content-Type: application/json; charset=utf-8');
         
@@ -43,7 +42,7 @@ class NotificationController {
         $extra_data = isset($data['data']) && is_array($data['data']) ? $data['data'] : [];
 
         if ($target_user_id <= 0 || empty($title) || empty($body)) {
-            echo json_encode(["success" => false, "error" => "user_id, title and body are required"], JSON_UNESCAPED_UNICODE);
+            Response::error("user_id, title and body are required", 400);
             return;
         }
 
@@ -62,7 +61,7 @@ class NotificationController {
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$row || empty($row['fcm_token'])) {
-                echo json_encode(["success" => false, "error" => "No token found for this user"], JSON_UNESCAPED_UNICODE);
+                Response::error("No token found for this user", 404);
                 return;
             }
 
@@ -76,10 +75,10 @@ class NotificationController {
 
             $result = $fcmService->sendNotification($targetToken, $title, $body, $notificationData);
 
-            echo json_encode($result, JSON_UNESCAPED_UNICODE);
+            Response::send($result);
 
         } catch (\Exception $e) {
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -97,7 +96,7 @@ class NotificationController {
         $device    = isset($data['device_type']) ? trim($data['device_type']) : 'android';
 
         if (empty($fcm_token)) {
-            echo json_encode(["success" => false, "error" => "fcm_token is required"], JSON_UNESCAPED_UNICODE);
+            Response::error("fcm_token is required", 400);
             return;
         }
 
@@ -116,9 +115,10 @@ class NotificationController {
             $stmt = $conn->prepare("INSERT INTO user_device_tokens (user_id, fcm_token, device_type, created_at) VALUES (:uid, :token, :dev, CURRENT_TIMESTAMP)");
             $stmt->execute([':uid' => $user_id, ':token' => $fcm_token, ':dev' => $device]);
 
-            echo json_encode(["success" => true, "message" => "Token saved successfully"], JSON_UNESCAPED_UNICODE);
+            Response::success([], "Token saved successfully");
 
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Exception $e) {
+            Response::error($e->getMessage(), 500);
         }
     }
 
@@ -132,17 +132,15 @@ class NotificationController {
         $body = $data["body"] ?? null;
 
         if (!$to || !$body) {
-            http_response_code(400);
-            echo json_encode(["success" => false, "error" => "Send 'to' and 'body' in JSON"], JSON_UNESCAPED_UNICODE);
+            Response::error("Send 'to' and 'body' in JSON", 400);
             return;
         }
 
         try {
             $result = Whapi::sendText($to, $body);
-            echo json_encode($result, JSON_UNESCAPED_UNICODE);
+            Response::send($result);
         } catch (\Throwable $e) {
-            http_response_code(500);
-            echo json_encode(["success" => false, "error" => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            Response::error($e->getMessage(), 500);
         }
     }
 }
