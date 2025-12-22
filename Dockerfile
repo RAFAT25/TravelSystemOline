@@ -1,11 +1,25 @@
 FROM php:8.1-apache
 
-# تثبيت مكتبة تطوير PostgreSQL (libpq-dev) اللازمة لتفعيل امتدادات pgsql و pdo_pgsql
-# Install system dependencies including libpq-dev and zip (for Composer)
-RUN apt-get update && apt-get install -y libpq-dev zip unzip
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    libicu-dev \
+    libzip-dev \
+    libonig-dev \
+    zip \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install mysqli pdo_mysql pdo_pgsql pgsql
+RUN docker-php-ext-install \
+    mysqli \
+    pdo_mysql \
+    pdo_pgsql \
+    pgsql \
+    intl \
+    bcmath \
+    mbstring \
+    zip
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
