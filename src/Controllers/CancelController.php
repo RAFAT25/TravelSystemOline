@@ -15,14 +15,16 @@ class CancelController {
         $this->conn = $db->connect();
     }
 
-    // GET/POST /api/bookings/cancel-preview
+    /**
+     * معاينة الإلغاء (Preview)
+     * هدفها إخبار المستخدم بالمبلغ المسترد قبل التنفيذ
+     */
     public function preview() {
         header('Content-Type: application/json; charset=utf-8');
 
         $input = file_get_contents('php://input');
         $data  = json_decode($input, true);
 
-        // Support for both POST (JSON) and GET (Query Params)
         $booking_id = isset($data['booking_id']) ? (int)$data['booking_id'] : (isset($_GET['booking_id']) ? (int)$_GET['booking_id'] : 0);
 
         if ($booking_id <= 0) {
@@ -31,22 +33,10 @@ class CancelController {
         }
 
         try {
-            // 1) جلب بيانات الحجز + الرحلة + السياسة
-            $sql = "
-                SELECT 
-                    b.booking_id,
-                    b.total_price,
-                    b.booking_status,
-                    b.payment_status,
-                    b.cancel_policy_id,
-                    t.departure_time,
-                    t.trip_id
-                FROM bookings b
-                JOIN trips t ON t.trip_id = b.trip_id
-                WHERE b.booking_id = :bid
-                LIMIT 1
-            ";
-
+            // 1) جلب بيانات الحجز والرحلة
+            $sql = "SELECT b.*, t.departure_time, t.trip_id FROM bookings b 
+                    JOIN trips t ON t.trip_id = b.trip_id 
+                    WHERE b.booking_id = :bid LIMIT 1";
             $stmt = $this->conn->prepare($sql);
             $stmt->execute([':bid' => $booking_id]);
             $booking = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -61,85 +51,56 @@ class CancelController {
                 return;
             }
 
-            $cancel_policy_id = (int)$booking['cancel_policy_id'];
-            $total_price      = (float)$booking['total_price'];
-            $departure_time   = $booking['departure_time'];
+            // حساب الوقت المتبقي بالساعات
+            $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+            $dep = new \DateTimeImmutable($booking['departure_time'], new \DateTimeZone('UTC'));
+            $hours_before_departure = ($dep->getTimestamp() - $now->getTimestamp()) / 3600.0;
 
+            // استخلاص البيانات الأساسية
+            $total_price = (float)$booking['total_price'];
             $payment_status = $booking['payment_status'] ?? 'Unpaid';
+            $cancel_policy_id = (int)$booking['cancel_policy_id'];
 
-            // 1) لو الحجز غير مدفوع
-            if ($payment_status === 'Unpaid') {
-                $refund_amount     = 0;
-                $refund_percentage = 0;
-                $cancellation_fee  = 0;
-                $rule = []; // No rule applied
-                
-                // For Preview purposes to calculate hours anyway
-                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-                $diff = $dep->getTimestamp() - $now->getTimestamp();
-                $hours_before_departure = $diff / 3600.0;
+            // المنطق: إذا كان الحجز غير مدفوع أو فات وقت الاسترداد
+            $refund_percentage = 0;
+            $cancellation_fee  = 0;
+            $refund_amount     = 0;
+            $rule_id           = 0;
 
-            } else {
-                // 2) لو الحجز مدفوع -> نطبق قواعد السياسة
-                
-                // حساب الساعات المتبقية قبل الانطلاق
-                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-                $diff = $dep->getTimestamp() - $now->getTimestamp();
-                $hours_before_departure = $diff / 3600.0;
-    
-                // 3) اختيار الـ rule المناسبة
-                $sqlRule = "
-                    SELECT *
-                    FROM cancel_policy_rules
-                    WHERE cancel_policy_id = :cpid
-                      AND is_active = TRUE
-                      AND min_hours_before_departure <= :hours::NUMERIC
-                      AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
-                    ORDER BY min_hours_before_departure DESC
-                    LIMIT 1
-                ";
+            if ($payment_status !== 'Unpaid') {
+                // البحث عن قاعدة الإلغاء المناسبة
+                $sqlRule = "SELECT * FROM cancel_policy_rules 
+                            WHERE cancel_policy_id = :cpid AND is_active = TRUE 
+                            AND min_hours_before_departure <= :hours 
+                            AND (max_hours_before_departure IS NULL OR :hours < max_hours_before_departure)
+                            ORDER BY min_hours_before_departure DESC LIMIT 1";
                 $stmtRule = $this->conn->prepare($sqlRule);
-                $stmtRule->execute([
-                    ':cpid'  => $cancel_policy_id,
-                    ':hours' => $hours_before_departure
-                ]);
+                $stmtRule->execute([':cpid' => $cancel_policy_id, ':hours' => $hours_before_departure]);
                 $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
-    
-                if (!$rule) {
-    // نعتبر الإلغاء بلا استرداد بدلاً من إرجاع خطأ
-                        $refund_percentage = 0;
-                        $cancellation_fee  = $total_price;
-                        $refund_amount     = 0;
-                        // بيانات وهمية للقاعدة لضمان نجاح الـ JSON
-                        $rule = ["cancel_policy_rule_id" => 0, "min_hours_before_departure" => 0, "refund_percentage" => 0, "cancellation_fee" => $total_price];
-                     }
-    
-                $refund_percentage = (float)$rule['refund_percentage'];
-                $cancellation_fee  = (float)$rule['cancellation_fee'];
-    
-                $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
-                if ($refund_amount < 0) {
-                    $refund_amount = 0;
+
+                if ($rule) {
+                    $rule_id = (int)($rule['cancel_policy_rule_id'] ?? $rule['id'] ?? 0);
+                    $refund_percentage = (float)$rule['refund_percentage'];
+                    $cancellation_fee  = (float)$rule['cancellation_fee'];
+                    $refund_amount = max(0, round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2));
+                } else {
+                    // إذا لم توجد قاعدة (قريب جداً من الرحلة) -> استرداد صفر ورسوم كاملة
+                    $cancellation_fee = $total_price;
                 }
             }
 
             Response::success([
                 "booking_id" => $booking_id,
-                "trip_id"    => (int)$booking['trip_id'],
                 "total_price" => $total_price,
-                "hours_before_departure" => $hours_before_departure,
+                "hours_before_departure" => round($hours_before_departure, 2),
                 "rule" => [
-                    "cancel_policy_rule_id" => (int)($rule['cancel_policy_rule_id'] ?? $rule['id'] ?? 0),
-                    "min_hours_before_departure" => (float)$rule['min_hours_before_departure'],
-                    "max_hours_before_departure" => $rule['max_hours_before_departure'],
-                    "refund_percentage"          => $refund_percentage,
-                    "cancellation_fee"           => $cancellation_fee
+                    "cancel_policy_rule_id" => $rule_id,
+                    "refund_percentage" => $refund_percentage,
+                    "cancellation_fee" => $cancellation_fee
                 ],
                 "calculated" => [
-                    "refund_amount"      => $refund_amount,
-                    "non_refundable_part"=> max(0, $total_price - $refund_amount)
+                    "refund_amount" => $refund_amount,
+                    "non_refundable_part" => max(0, $total_price - $refund_amount)
                 ]
             ]);
 
@@ -148,185 +109,78 @@ class CancelController {
         }
     }
 
-    // POST /api/bookings/cancel
+    /**
+     * تأكيد الإلغاء الفعلي (Confirm)
+     */
     public function confirm() {
         header('Content-Type: application/json; charset=utf-8');
-
         $input = file_get_contents('php://input');
-        $data  = json_decode($input, true);
+        $data = json_decode($input, true);
 
         $booking_id = isset($data['booking_id']) ? (int)$data['booking_id'] : 0;
-        $reason     = isset($data['reason']) ? trim($data['reason']) : '';
-
-        if ($booking_id <= 0) {
-            Response::error("Invalid booking_id", 400);
-            return;
-        }
+        $reason = $data['reason'] ?? 'Customer request';
 
         try {
             $this->conn->beginTransaction();
 
-            // 1) جلب بيانات الحجز
-            $sql = "
-                SELECT 
-                    b.booking_id,
-                    b.total_price,
-                    b.booking_status,
-                    b.payment_status,
-                    b.cancel_policy_id,
-                    b.trip_id,
-                    t.departure_time
-                FROM bookings b
-                JOIN trips t ON t.trip_id = b.trip_id
-                WHERE b.booking_id = :bid
-                FOR UPDATE
-            ";
-            $stmt = $this->conn->prepare($sql);
+            // 1) جلب البيانات وقفل السجل (FOR UPDATE)
+            $stmt = $this->conn->prepare("SELECT b.*, t.departure_time FROM bookings b JOIN trips t ON t.trip_id = b.trip_id WHERE b.booking_id = :bid FOR UPDATE");
             $stmt->execute([':bid' => $booking_id]);
             $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$booking) {
-                throw new Exception("Booking not found");
+            if (!$booking || $booking['booking_status'] === 'Cancelled') {
+                throw new Exception("Booking invalid or already cancelled");
             }
 
-            if ($booking['booking_status'] === 'Cancelled') {
-                throw new Exception("Booking already cancelled");
-            }
+            // 2) حساب الحسبة (نفس منطق الـ Preview تماماً)
+            $total_price = (float)$booking['total_price'];
+            $dep = new \DateTimeImmutable($booking['departure_time'], new \DateTimeZone('UTC'));
+            $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+            $hours = ($dep->getTimestamp() - $now->getTimestamp()) / 3600.0;
 
-            $cancel_policy_id = (int)$booking['cancel_policy_id'];
-            $total_price      = (float)$booking['total_price'];
-            $departure_time   = $booking['departure_time'];
-            $trip_id          = (int)$booking['trip_id'];
+            $refund_amount = 0; $refund_pct = 0; $fee = $total_price; $rule_id = 0;
 
-            $payment_status = $booking['payment_status'] ?? 'Unpaid';
+            if ($booking['payment_status'] !== 'Unpaid') {
+                $stmtRule = $this->conn->prepare("SELECT * FROM cancel_policy_rules WHERE cancel_policy_id = :cpid AND is_active = TRUE AND min_hours_before_departure <= :h AND (max_hours_before_departure IS NULL OR :h < max_hours_before_departure) ORDER BY min_hours_before_departure DESC LIMIT 1");
+                $stmtRule->execute([':cpid' => $booking['cancel_policy_id'], ':h' => $hours]);
+                $r = $stmtRule->fetch(PDO::FETCH_ASSOC);
 
-            if ($payment_status === 'Unpaid') {
-                 // Unpaid -> Cancel directly with 0 refund
-                 $refund_percentage = 0;
-                 $cancellation_fee  = 0;
-                 $refund_amount     = 0;
-                 $rule = []; // No specific rule used
-                 
-                 // Calc hours just for logging
-                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-                $diff = $dep->getTimestamp() - $now->getTimestamp();
-                $hours_before_departure = $diff / 3600.0;
-                
-            } else {
-                // Paid -> Apply Policy
-                
-                // 2) حساب الساعات المتبقية
-                $now  = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-                $dep  = new \DateTimeImmutable($departure_time, new \DateTimeZone('UTC'));
-                $diff = $dep->getTimestamp() - $now->getTimestamp();
-                $hours_before_departure = $diff / 3600.0;
-    
-                // 3) اختيار الـ rule
-                $sqlRule = "
-                    SELECT *
-                    FROM cancel_policy_rules
-                    WHERE cancel_policy_id = :cpid
-                      AND is_active = TRUE
-                      AND min_hours_before_departure <= :hours::NUMERIC
-                      AND (max_hours_before_departure IS NULL OR :hours::NUMERIC < max_hours_before_departure)
-                    ORDER BY min_hours_before_departure DESC
-                    LIMIT 1
-                ";
-                $stmtRule = $this->conn->prepare($sqlRule);
-                $stmtRule->execute([
-                    ':cpid'  => $cancel_policy_id,
-                    ':hours' => $hours_before_departure
-                ]);
-                $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
-    
-                if (!$rule) {
-                    throw new Exception("No matching cancel rule for this time window");
-                }
-    
-                $refund_percentage = (float)$rule['refund_percentage'];
-                $cancellation_fee  = (float)$rule['cancellation_fee'];
-    
-                $refund_amount = round(($total_price * $refund_percentage / 100.0) - $cancellation_fee, 2);
-                if ($refund_amount < 0) {
-                    $refund_amount = 0;
+                if ($r) {
+                    $rule_id = (int)($r['cancel_policy_rule_id'] ?? $r['id'] ?? 0);
+                    $refund_pct = (float)$r['refund_percentage'];
+                    $fee = (float)$r['cancellation_fee'];
+                    $refund_amount = max(0, round(($total_price * $refund_pct / 100.0) - $fee, 2));
                 }
             }
 
-            // 4) تحديث حالة الحجز + الركاب + المقاعد
-            $newPaymentStatus = ($payment_status === 'Paid' || $payment_status === 'Partial') ? 'Refunded' : $payment_status;
-
-            $stmtUpdateBooking = $this->conn->prepare("
-                UPDATE bookings
-                SET booking_status = 'Cancelled',
-                    payment_status = :pstatus,
-                    cancel_reason  = :reason,
-                    cancel_timestamp = CURRENT_TIMESTAMP
-                WHERE booking_id = :bid
-            ");
-            $stmtUpdateBooking->execute([
-                ':pstatus' => $newPaymentStatus,
-                ':reason'  => $reason,
-                ':bid'     => $booking_id
-            ]);
-
-            // تحديث الركاب
-            $stmtUpdatePassengers = $this->conn->prepare("
-                UPDATE passengers
-                SET passenger_status = 'Cancelled'
-                WHERE booking_id = :bid
-            ");
-            $stmtUpdatePassengers->execute([':bid' => $booking_id]);
-
+            // 3) تحديث الحجز والركاب والمقاعد
+            $new_p_status = ($booking['payment_status'] === 'Paid') ? 'Refunded' : $booking['payment_status'];
+            
+            $this->conn->prepare("UPDATE bookings SET booking_status='Cancelled', payment_status=:ps, cancel_reason=:re, cancel_timestamp=NOW() WHERE booking_id=:bid")->execute([':ps'=>$new_p_status, ':re'=>$reason, ':bid'=>$booking_id]);
+            $this->conn->prepare("UPDATE passengers SET passenger_status='Cancelled' WHERE booking_id=:bid")->execute([':bid'=>$booking_id]);
+            
             // تحرير المقاعد
-            $stmtSeats = $this->conn->prepare("
-                SELECT seat_id
-                FROM passengers
-                WHERE booking_id = :bid
-            ");
-            $stmtSeats->execute([':bid' => $booking_id]);
-            $seatIds = $stmtSeats->fetchAll(PDO::FETCH_COLUMN);
-
-            if (!empty($seatIds)) {
-                $inSeatIds = implode(',', array_fill(0, count($seatIds), '?'));
-                $sqlFreeSeats = "UPDATE seats SET is_available = TRUE WHERE seat_id IN ($inSeatIds)";
-                $stmtFreeSeats = $this->conn->prepare($sqlFreeSeats);
-                $stmtFreeSeats->execute($seatIds);
+            $stmtS = $this->conn->prepare("SELECT seat_id FROM passengers WHERE booking_id=:bid");
+            $stmtS->execute([':bid'=>$booking_id]);
+            $seats = $stmtS->fetchAll(PDO::FETCH_COLUMN);
+            if($seats) {
+                $ids = implode(',', $seats);
+                $this->conn->query("UPDATE seats SET is_available=TRUE WHERE seat_id IN ($ids)");
             }
 
-            // 5) إدخال سجل الإلغاء booking_cancellations
-            $stmtInsertCancel = $this->conn->prepare("
-                INSERT INTO booking_cancellations
-                (booking_id, cancel_policy_id, cancel_policy_rule_id, refund_percentage, cancellation_fee, refund_amount, reason, hours_before_departure, created_at)
-                VALUES
-                (:bid, :cpid, :rule_id, :refund_pct, :fee, :refund_amt, :reason, :hours, CURRENT_TIMESTAMP)
-            ");
-            $stmtInsertCancel->execute([
-                ':bid'       => $booking_id,
-                ':cpid'      => $cancel_policy_id,
-                ':rule_id'   => (int)($rule['cancel_policy_rule_id'] ?? $rule['id'] ?? 0),
-                ':refund_pct'=> $refund_percentage,
-                ':fee'       => $cancellation_fee,
-                ':refund_amt'=> $refund_amount,
-                ':reason'    => $reason,
-                ':hours'     => $hours_before_departure
+            // 4) تسجيل في جدول الإلغاءات
+            $sqlIns = "INSERT INTO booking_cancellations (booking_id, cancel_policy_id, cancel_policy_rule_id, refund_percentage, cancellation_fee, refund_amount, reason, hours_before_departure) 
+                       VALUES (:bid, :cpid, :rid, :rp, :cf, :ra, :reason, :h)";
+            $this->conn->prepare($sqlIns)->execute([
+                ':bid'=>$booking_id, ':cpid'=>$booking['cancel_policy_id'], ':rid'=>$rule_id, 
+                ':rp'=>$refund_pct, ':cf'=>$fee, ':ra'=>$refund_amount, ':reason'=>$reason, ':h'=>$hours
             ]);
 
             $this->conn->commit();
-
-            Response::success([
-                "booking_id" => $booking_id,
-                "trip_id"    => $trip_id,
-                "total_price" => $total_price,
-                "refund_amount" => $refund_amount,
-                "refund_percentage" => $refund_percentage,
-                "cancellation_fee"  => $cancellation_fee
-            ]);
+            Response::success(["refund_amount" => $refund_amount, "status" => "Cancelled"]);
 
         } catch (Exception $e) {
-            if ($this->conn->inTransaction()) {
-                $this->conn->rollBack();
-            }
+            if ($this->conn->inTransaction()) $this->conn->rollBack();
             Response::error($e->getMessage(), 500);
         }
     }
