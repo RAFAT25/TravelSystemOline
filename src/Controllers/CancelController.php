@@ -108,11 +108,13 @@ class CancelController {
                 $rule = $stmtRule->fetch(PDO::FETCH_ASSOC);
     
                 if (!$rule) {
-                    Response::error("No matching cancel rule for this time window", 422, [
-                        "hours_before_departure" => $hours_before_departure
-                    ]);
-                    return;
-                }
+    // نعتبر الإلغاء بلا استرداد بدلاً من إرجاع خطأ
+                        $refund_percentage = 0;
+                        $cancellation_fee  = $total_price;
+                        $refund_amount     = 0;
+                        // بيانات وهمية للقاعدة لضمان نجاح الـ JSON
+                        $rule = ["cancel_policy_rule_id" => 0, "min_hours_before_departure" => 0, "refund_percentage" => 0, "cancellation_fee" => $total_price];
+                     }
     
                 $refund_percentage = (float)$rule['refund_percentage'];
                 $cancellation_fee  = (float)$rule['cancellation_fee'];
